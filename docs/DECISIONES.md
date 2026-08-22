@@ -54,9 +54,15 @@ Endpoints verificados en developers.facebook.com el mismo día: authorize en `ww
 ### D16. ESLint ligero + CI
 Flat config con typescript-eslint recommended sin reglas type-checked (ese coste ya lo paga tsc strict). Workflow de GitHub Actions (typecheck → lint → test → build web) listo para cuando exista remoto.
 
+### D17. Orquestador Fase 2 (primer tramo): calendario → borradores
+`POST /api/calendar/generate-drafts` genera piezas solo para slots con tema concreto; los "Por definir" se reportan como pendientes de input humano — el sistema pide el dato, no lo inventa (spec §57, §63). Se ejecuta síncrono en la API para el MVP; cuando la semana completa use proveedor real (6 llamadas LLM), moverlo a un job del worker es el paso natural (la cola ya existe).
+
+### D18. Hardening de inputs (spec §32)
+`PUT /api/brand` y `PATCH /api/content/:id` pasan a schemas `.strict()` (rechazan campos desconocidos; `tenantId` inmutable) con topes de longitud en todos los strings. Motivo: la Brand Memory alimenta prompts — un campo sin tope es vector de prompt injection y de coste descontrolado.
+
 ## Pendientes conocidos (no implementar sin validar la fase)
 - Validación E2E del OAuth con una app de Meta real (bloqueado por: crear la app — ver docs/GUIA_APP_META.md).
-- Obtener `username` del perfil tras OAuth (GET /me).
 - Analytics con insights reales de Instagram (requiere cuenta conectada; no construir contra datos inventados).
-- Vincular slots del calendario con generación automática de piezas (Fase 2, orquestador).
+- Mover generate-drafts a job del worker cuando se use proveedor real.
+- Rate limiting HTTP global (@fastify/rate-limit) antes de exponer la API a internet.
 - RBAC y multiusuario (§32) al pasar de tenant único.
