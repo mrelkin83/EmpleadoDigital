@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { AppContext } from './context.js';
+import { registerAuthRoutes } from './routes/auth.js';
 import { registerContentRoutes } from './routes/content.js';
 import { registerMiscRoutes } from './routes/misc.js';
 import { registerWebhookRoutes } from './routes/webhooks.js';
@@ -28,6 +29,7 @@ export async function buildServer(ctx: AppContext): Promise<FastifyInstance> {
   });
 
   registerMiscRoutes(app, ctx);
+  registerAuthRoutes(app, ctx);
   registerContentRoutes(app, ctx);
   registerWebhookRoutes(app, ctx);
 

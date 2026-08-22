@@ -13,6 +13,11 @@ const envSchema = z.object({
   META_VERIFY_TOKEN: z.string().optional(),
   INSTAGRAM_ACCESS_TOKEN: z.string().optional(),
   INSTAGRAM_BUSINESS_ACCOUNT_ID: z.string().optional(),
+  INSTAGRAM_APP_ID: z.string().optional(),
+  INSTAGRAM_APP_SECRET: z.string().optional(),
+  OAUTH_REDIRECT_URI: z.string().url().optional(),
+  TOKEN_ENCRYPTION_KEY: z.string().length(64).optional(),
+  WEB_BASE_URL: z.string().url().default('http://localhost:3000'),
   ANTHROPIC_API_KEY: z.string().optional(),
   AI_DAILY_BUDGET_USD: z.coerce.number().default(5),
 });

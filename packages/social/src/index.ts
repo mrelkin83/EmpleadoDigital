@@ -3,5 +3,6 @@ export * from './policy/engine.js';
 export * from './instagram/connector.js';
 export * from './instagram/webhook-verify.js';
 export * from './instagram/webhook-parser.js';
+export * from './instagram/oauth.js';
 export * from './community/keyword-matcher.js';
 export * from './community/cooldown.js';

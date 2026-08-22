@@ -108,6 +108,12 @@ export default function Dashboard() {
               ? 'Instagram conectado'
               : 'Instagram sin conectar'
             : 'Conectando...'}
+          {health && !health.instagramConnected && (
+            <>
+              {' · '}
+              <a href="/auth/instagram/login">Conectar Instagram</a>
+            </>
+          )}
         </span>
       </header>
 

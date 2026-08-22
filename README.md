@@ -57,4 +57,5 @@ npm run typecheck  # TypeScript strict en todo el monorepo
 
 - ✅ Fase 0: monorepo, tipado estricto, tests, esquema de base de datos, observabilidad básica.
 - ✅ Fase 1 (parcial): brand memory (seed piloto), generación de contenido con Quality Gate, flujo de aprobación, conector de publicación oficial, webhooks con pipeline de comentarios gobernado.
-- ⏳ Pendiente: OAuth de Meta, analytics reales, calendario UI, más proveedores IA. Ver `docs/DECISIONES.md`.
+- ✅ OAuth de Instagram (Business Login) con state anti-CSRF, tokens cifrados en reposo (AES-256-GCM), refresh automático y validación de scopes. Registro de costes de IA persistido en PostgreSQL.
+- ⏳ Pendiente: validación E2E del OAuth con una app real de Meta, analytics con insights, calendario UI, ESLint/CI, más proveedores IA. Ver `docs/DECISIONES.md`.

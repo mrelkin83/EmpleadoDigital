@@ -32,9 +32,20 @@ El Policy Engine enumera las acciones Nivel 4 (scraping, mass_follow, buy_follow
 ### D10. instabot como referencia, no como dependencia
 Se adaptaron patrones (ver docs/ANALISIS_INSTABOT.md) reescritos dentro de nuestra arquitectura con gobernanza. No se importa código suyo como librería.
 
+## 2026-08-21 (2ª iteración) — OAuth y cierre de deudas
+
+### D11. OAuth de Instagram (Business Login) implementado contra documentación oficial
+Endpoints verificados en developers.facebook.com el mismo día: authorize en `www.instagram.com/oauth/authorize`, token corto en `api.instagram.com/oauth/access_token`, token de 60 días y refresh en `graph.instagram.com`. Anti-CSRF con `state` de un solo uso (TTL 10 min). Los scopes concedidos se toman de la respuesta del token y se validan contra los del MVP; si faltan, se registra alerta en la bitácora y el Policy Engine bloqueará las acciones sin permiso. Fallback de desarrollo: token por env var (Opción B en .env.example).
+
+### D12. Tokens cifrados en reposo (AES-256-GCM)
+`TOKEN_ENCRYPTION_KEY` (32 bytes hex) por entorno; el token nunca toca disco en claro (spec §32). Refresh proactivo al arrancar si vence en <10 días (y tiene >24h, requisito de Meta).
+
+### D13. `ai_usage` persistido en PostgreSQL
+`PgUsageSink` comparte el pool de `PgStore`; el presupuesto diario sobrevive reinicios. Con MemoryStore se mantiene el sink en memoria (solo dev).
+
 ## Pendientes conocidos (no implementar sin validar la fase)
-- OAuth real de Meta (onboarding §10 paso 4): hoy el token entra por env var.
-- Persistencia de `ai_usage` en PostgreSQL (hoy sink en memoria; tabla ya creada).
+- Obtener `username` del perfil tras OAuth (GET /me) y validación E2E con una app de Meta real.
 - ESLint (gate actual: tsc strict; añadir linter en CI).
 - CI/CD (Fase 0 del roadmap; definir cuando exista remoto git).
-- Cifrado de tokens en reposo y RBAC (§32) al pasar a multiusuario.
+- RBAC y multiusuario (§32) al pasar de tenant único.
+- Analytics con insights reales (Fase 1) y calendario en UI.

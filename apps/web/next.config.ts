@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
     return [
       { source: '/api/:path*', destination: `${apiBase}/api/:path*` },
       { source: '/health', destination: `${apiBase}/health` },
+      { source: '/auth/:path*', destination: `${apiBase}/auth/:path*` },
     ];
   },
 };

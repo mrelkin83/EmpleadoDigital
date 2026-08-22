@@ -29,7 +29,23 @@ export interface Lead {
   createdAt: Date;
 }
 
+export interface StoredSocialAccount {
+  id: string;
+  tenantId: string;
+  platform: 'instagram';
+  externalAccountId: string;
+  username: string;
+  /** Token cifrado con AES-256-GCM; nunca se guarda en claro (spec §32). */
+  tokenEncrypted: string;
+  tokenExpiresAt?: Date;
+  grantedScopes: string[];
+  connectedAt: Date;
+}
+
 export interface Store {
+  getSocialAccount(tenantId: string, platform: string): Promise<StoredSocialAccount | null>;
+  saveSocialAccount(account: StoredSocialAccount): Promise<void>;
+
   getBrand(tenantId: string): Promise<BrandMemory | null>;
   saveBrand(memory: BrandMemory): Promise<void>;
 

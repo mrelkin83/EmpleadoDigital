@@ -3,11 +3,12 @@ import postgres from 'postgres';
 import type { BrandMemory } from '@empleado/brand';
 import type { ContentPiece } from '@empleado/content';
 import type { ActivityEntry } from '@empleado/shared';
-import type { ApprovalRequest, Lead, Store } from './store.js';
+import type { ApprovalRequest, Lead, Store, StoredSocialAccount } from './store.js';
 
 /** Persistencia PostgreSQL. Esquema en /db/migrations (ejecutar npm run db:migrate). */
 export class PgStore implements Store {
-  private readonly sql: postgres.Sql;
+  /** Expuesto para componentes que comparten el pool (p. ej. PgUsageSink). */
+  readonly sql: postgres.Sql;
 
   constructor(databaseUrl: string) {
     this.sql = postgres(databaseUrl, { max: 10 });
@@ -18,6 +19,40 @@ export class PgStore implements Store {
     await this.sql`
       INSERT INTO tenants (id, name) VALUES (${tenantId}, ${name})
       ON CONFLICT (id) DO NOTHING`;
+  }
+
+  async getSocialAccount(tenantId: string, platform: string): Promise<StoredSocialAccount | null> {
+    const rows = await this.sql`
+      SELECT * FROM social_accounts WHERE tenant_id = ${tenantId} AND platform = ${platform}`;
+    if (!rows.length) return null;
+    const r = rows[0]!;
+    return {
+      id: r['id'] as string,
+      tenantId: r['tenant_id'] as string,
+      platform: r['platform'] as 'instagram',
+      externalAccountId: r['external_account_id'] as string,
+      username: r['username'] as string,
+      tokenEncrypted: r['token_encrypted'] as string,
+      ...(r['token_expires_at'] ? { tokenExpiresAt: r['token_expires_at'] as Date } : {}),
+      grantedScopes: (r['granted_scopes'] as string[]) ?? [],
+      connectedAt: r['connected_at'] as Date,
+    };
+  }
+
+  async saveSocialAccount(a: StoredSocialAccount): Promise<void> {
+    await this.ensureTenant(a.tenantId, 'tenant');
+    await this.sql`
+      INSERT INTO social_accounts (id, tenant_id, platform, external_account_id, username,
+        token_encrypted, token_expires_at, granted_scopes, connected_at)
+      VALUES (${a.id}, ${a.tenantId}, ${a.platform}, ${a.externalAccountId}, ${a.username},
+        ${a.tokenEncrypted}, ${a.tokenExpiresAt ?? null}, ${a.grantedScopes}, ${a.connectedAt})
+      ON CONFLICT (tenant_id, platform) DO UPDATE SET
+        external_account_id = EXCLUDED.external_account_id,
+        username = EXCLUDED.username,
+        token_encrypted = EXCLUDED.token_encrypted,
+        token_expires_at = EXCLUDED.token_expires_at,
+        granted_scopes = EXCLUDED.granted_scopes,
+        connected_at = EXCLUDED.connected_at`;
   }
 
   async getBrand(tenantId: string): Promise<BrandMemory | null> {

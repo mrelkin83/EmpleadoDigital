@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { BrandMemory } from '@empleado/brand';
 import type { ContentPiece } from '@empleado/content';
 import type { ActivityEntry } from '@empleado/shared';
-import type { ApprovalRequest, Lead, Store } from './store.js';
+import type { ApprovalRequest, Lead, Store, StoredSocialAccount } from './store.js';
 
 /** Almacenamiento en memoria para desarrollo sin base de datos. No persistente. */
 export class MemoryStore implements Store {
@@ -11,6 +11,15 @@ export class MemoryStore implements Store {
   private activity: ActivityEntry[] = [];
   private approvals = new Map<string, ApprovalRequest>();
   private leads = new Map<string, Lead>();
+  private socialAccounts = new Map<string, StoredSocialAccount>();
+
+  async getSocialAccount(tenantId: string, platform: string): Promise<StoredSocialAccount | null> {
+    return this.socialAccounts.get(`${tenantId}:${platform}`) ?? null;
+  }
+
+  async saveSocialAccount(account: StoredSocialAccount): Promise<void> {
+    this.socialAccounts.set(`${account.tenantId}:${account.platform}`, account);
+  }
 
   async getBrand(tenantId: string): Promise<BrandMemory | null> {
     return this.brands.get(tenantId) ?? null;

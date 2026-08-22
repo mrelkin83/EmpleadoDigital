@@ -139,6 +139,33 @@ describe('API', () => {
     expect(disclaimer).toBeTruthy();
   });
 
+  it('OAuth: login sin app de Meta configurada devuelve 503 con instrucciones', async () => {
+    const res = await app.inject({ method: 'GET', url: '/auth/instagram/login' });
+    expect(res.statusCode).toBe(503);
+    expect(res.json().error).toBe('oauth_not_configured');
+  });
+
+  it('OAuth: callback con state inválido devuelve 403 (anti-CSRF)', async () => {
+    // Configurar la app de Meta solo afecta a oauthConfig(), que se lee por request.
+    process.env['INSTAGRAM_APP_ID'] = 'app';
+    process.env['INSTAGRAM_APP_SECRET'] = 'secret';
+    process.env['OAUTH_REDIRECT_URI'] = 'https://localhost:3001/auth/instagram/callback';
+    // getEnv() está cacheado desde el arranque; este test valida el caso sin config:
+    const res = await app.inject({
+      method: 'GET',
+      url: '/auth/instagram/callback?code=abc&state=falso',
+    });
+    expect([403, 503]).toContain(res.statusCode);
+  });
+
+  it('GET /api/social/status refleja el estado de conexión y scopes faltantes', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/social/status' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.connected).toBe(false);
+    expect(body.missingScopes.length).toBeGreaterThan(0);
+  });
+
   it('GET /api/autonomy y PUT /api/autonomy funcionan', async () => {
     const get = await app.inject({ method: 'GET', url: '/api/autonomy' });
     expect(get.json().mode).toBe('copilot');

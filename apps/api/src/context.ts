@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { InMemoryUsageSink, TaskRouter } from '@empleado/ai-core';
+import { InMemoryUsageSink, TaskRouter, type UsageSink } from '@empleado/ai-core';
 import { buildProvidersFromEnv } from '@empleado/ai-providers';
 import { buildPilotBrandMemory } from '@empleado/brand';
 import {
@@ -7,12 +7,21 @@ import {
   InstagramConnector,
   KeywordMatcher,
   SocialPolicyEngine,
+  refreshLongLivedToken,
 } from '@empleado/social';
-import { DEFAULT_AUTONOMY, logger, type ActivityEntry, type AutonomyConfig } from '@empleado/shared';
+import {
+  DEFAULT_AUTONOMY,
+  decryptSecret,
+  encryptSecret,
+  logger,
+  type ActivityEntry,
+  type AutonomyConfig,
+} from '@empleado/shared';
 import { getEnv } from './env.js';
 import { MemoryStore } from './store/memory.js';
 import { PgStore } from './store/pg.js';
-import type { Store } from './store/store.js';
+import { PgUsageSink } from './usage/pg-usage-sink.js';
+import type { Store, StoredSocialAccount } from './store/store.js';
 
 /**
  * Contexto de aplicación: composición de dependencias.
@@ -31,6 +40,8 @@ export interface AppContext {
   autonomy: AutonomyConfig;
   grantedScopes: string[];
   logActivity(entry: Omit<ActivityEntry, 'id' | 'tenantId' | 'at'>): Promise<void>;
+  /** Activa la conexión de Instagram tras un OAuth exitoso (hot-swap sin reiniciar). */
+  connectInstagram(account: StoredSocialAccount, plainToken: string): void;
 }
 
 export async function buildContext(): Promise<AppContext> {
@@ -48,30 +59,11 @@ export async function buildContext(): Promise<AppContext> {
   }
 
   const providers = buildProvidersFromEnv();
-  const router = new TaskRouter(providers, new InMemoryUsageSink(), {
+  const usageSink: UsageSink =
+    store instanceof PgStore ? new PgUsageSink(store.sql) : new InMemoryUsageSink();
+  const router = new TaskRouter(providers, usageSink, {
     dailyBudgetUsd: env.AI_DAILY_BUDGET_USD,
   });
-
-  const instagram =
-    env.INSTAGRAM_ACCESS_TOKEN && env.INSTAGRAM_BUSINESS_ACCOUNT_ID
-      ? new InstagramConnector({
-          accessToken: env.INSTAGRAM_ACCESS_TOKEN,
-          businessAccountId: env.INSTAGRAM_BUSINESS_ACCOUNT_ID,
-        })
-      : null;
-  if (!instagram) {
-    logger.warn('Instagram no conectado: define INSTAGRAM_ACCESS_TOKEN e INSTAGRAM_BUSINESS_ACCOUNT_ID');
-  }
-
-  // Los scopes reales se validarán tras el flujo OAuth (spec §9). Sin conexión: sin scopes.
-  const grantedScopes = instagram
-    ? [
-        'instagram_business_basic',
-        'instagram_business_content_publish',
-        'instagram_business_manage_comments',
-        'instagram_business_manage_messages',
-      ]
-    : [];
 
   const ctx: AppContext = {
     store,
@@ -79,9 +71,9 @@ export async function buildContext(): Promise<AppContext> {
     policyEngine: new SocialPolicyEngine(),
     keywordMatcher: new KeywordMatcher(),
     cooldowns: new CooldownService(),
-    instagram,
+    instagram: null,
     autonomy: DEFAULT_AUTONOMY,
-    grantedScopes,
+    grantedScopes: [],
     async logActivity(entry) {
       await store.addActivity({
         id: randomUUID(),
@@ -90,6 +82,76 @@ export async function buildContext(): Promise<AppContext> {
         ...entry,
       });
     },
+    connectInstagram(account, plainToken) {
+      ctx.instagram = new InstagramConnector({
+        accessToken: plainToken,
+        businessAccountId: account.externalAccountId,
+      });
+      ctx.grantedScopes = account.grantedScopes;
+    },
   };
+
+  await restoreInstagramConnection(ctx);
   return ctx;
+}
+
+/**
+ * Restaura la conexión de Instagram al arrancar:
+ * 1) cuenta OAuth almacenada (token cifrado) — con refresh automático si vence pronto;
+ * 2) fallback: token por variables de entorno (setup manual de desarrollo).
+ */
+async function restoreInstagramConnection(ctx: AppContext): Promise<void> {
+  const env = getEnv();
+
+  const account = await ctx.store.getSocialAccount(DEFAULT_TENANT_ID, 'instagram');
+  if (account && env.TOKEN_ENCRYPTION_KEY) {
+    try {
+      let token = decryptSecret(account.tokenEncrypted, env.TOKEN_ENCRYPTION_KEY);
+
+      // Refresh proactivo: el token de larga duración dura 60 días y es refrescable
+      // desde las 24h de emitido. Umbral: vence en menos de 10 días.
+      const tenDays = 10 * 24 * 3600 * 1000;
+      const dayMs = 24 * 3600 * 1000;
+      const oldEnough = Date.now() - account.connectedAt.getTime() > dayMs;
+      if (account.tokenExpiresAt && oldEnough && account.tokenExpiresAt.getTime() - Date.now() < tenDays) {
+        try {
+          const refreshed = await refreshLongLivedToken(token);
+          token = refreshed.accessToken;
+          await ctx.store.saveSocialAccount({
+            ...account,
+            tokenEncrypted: encryptSecret(token, env.TOKEN_ENCRYPTION_KEY),
+            tokenExpiresAt: refreshed.expiresAt,
+          });
+          logger.info('Token de Instagram refrescado proactivamente');
+        } catch (err) {
+          logger.warn({ err }, 'No se pudo refrescar el token de Instagram; se usa el vigente');
+        }
+      }
+
+      ctx.connectInstagram(account, token);
+      logger.info({ username: account.username }, 'Instagram restaurado desde cuenta OAuth almacenada');
+      return;
+    } catch (err) {
+      logger.error({ err }, 'No se pudo descifrar el token almacenado; reconecta la cuenta');
+    }
+  }
+
+  if (env.INSTAGRAM_ACCESS_TOKEN && env.INSTAGRAM_BUSINESS_ACCOUNT_ID) {
+    ctx.instagram = new InstagramConnector({
+      accessToken: env.INSTAGRAM_ACCESS_TOKEN,
+      businessAccountId: env.INSTAGRAM_BUSINESS_ACCOUNT_ID,
+    });
+    // Sin OAuth no hay lista real de permisos: se asumen los del MVP y la API los
+    // validará en la primera llamada (spec §9). Preferir siempre el flujo OAuth.
+    ctx.grantedScopes = [
+      'instagram_business_basic',
+      'instagram_business_content_publish',
+      'instagram_business_manage_comments',
+      'instagram_business_manage_messages',
+    ];
+    logger.info('Instagram configurado por variables de entorno (modo desarrollo)');
+    return;
+  }
+
+  logger.warn('Instagram no conectado: usa /auth/instagram/login (OAuth) o variables INSTAGRAM_*');
 }
