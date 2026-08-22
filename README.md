@@ -19,7 +19,7 @@ packages/
   skills/        generate_caption, classify_comment, publish_post
 db/
   migrations/    Esquema PostgreSQL (multi-tenant desde el día 1)
-docs/            Análisis de instabot, decisiones técnicas, reportes
+docs/            Análisis de instabot, decisiones técnicas, guía de la app de Meta
 ```
 
 ## Arranque rápido (desarrollo)
@@ -36,6 +36,8 @@ npm run dev:api               # API en http://127.0.0.1:3001
 npm run dev:web               # Dashboard en http://localhost:3000
 npm run dev:worker            # Worker (requiere DATABASE_URL)
 ```
+
+Para conectar Instagram real, sigue **[docs/GUIA_APP_META.md](./docs/GUIA_APP_META.md)** (crear la app en developers.facebook.com, OAuth y webhooks paso a paso).
 
 Sin `DATABASE_URL` la API usa almacenamiento en memoria (solo desarrollo). Sin `ANTHROPIC_API_KEY` la IA es un mock con salida marcada `[MOCK]` que el Quality Gate bloquea para publicación — nunca se presenta contenido simulado como real.
 
