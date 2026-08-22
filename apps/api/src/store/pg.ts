@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import postgres from 'postgres';
 import type { BrandMemory } from '@empleado/brand';
-import type { ContentPiece } from '@empleado/content';
+import type { CalendarSlot, ContentPiece } from '@empleado/content';
 import type { ActivityEntry } from '@empleado/shared';
 import type { ApprovalRequest, Lead, Store, StoredSocialAccount } from './store.js';
 
@@ -137,6 +137,37 @@ export class PgStore implements Store {
       INSERT INTO approval_requests (id, tenant_id, kind, resource_id, summary, status, created_at, resolved_at)
       VALUES (${a.id}, ${a.tenantId}, ${a.kind}, ${a.resourceId}, ${a.summary}, ${a.status}, ${a.createdAt}, ${a.resolvedAt ?? null})
       ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, resolved_at = EXCLUDED.resolved_at`;
+  }
+
+  async listCalendar(tenantId: string, fromDate?: string): Promise<CalendarSlot[]> {
+    const rows = fromDate
+      ? await this.sql`SELECT * FROM calendar_slots WHERE tenant_id = ${tenantId} AND date >= ${fromDate} ORDER BY date, time`
+      : await this.sql`SELECT * FROM calendar_slots WHERE tenant_id = ${tenantId} ORDER BY date, time`;
+    return rows.map((r) => ({
+      id: r['id'] as string,
+      tenantId: r['tenant_id'] as string,
+      date: (r['date'] instanceof Date ? r['date'].toISOString().slice(0, 10) : String(r['date'])),
+      time: r['time'] as string,
+      format: r['format'] as CalendarSlot['format'],
+      pillar: r['pillar'] as string,
+      funnel: r['funnel'] as CalendarSlot['funnel'],
+      topic: r['topic'] as string,
+      objective: r['objective'] as string,
+      channel: 'instagram',
+      ...(r['content_piece_id'] ? { contentPieceId: r['content_piece_id'] as string } : {}),
+      status: r['status'] as CalendarSlot['status'],
+    }));
+  }
+
+  async saveCalendarSlot(s: CalendarSlot): Promise<void> {
+    await this.sql`
+      INSERT INTO calendar_slots (id, tenant_id, date, time, format, pillar, funnel, topic,
+        objective, channel, content_piece_id, status)
+      VALUES (${s.id}, ${s.tenantId}, ${s.date}, ${s.time}, ${s.format}, ${s.pillar}, ${s.funnel},
+        ${s.topic}, ${s.objective}, ${s.channel}, ${s.contentPieceId ?? null}, ${s.status})
+      ON CONFLICT (id) DO UPDATE SET
+        date = EXCLUDED.date, time = EXCLUDED.time, topic = EXCLUDED.topic,
+        content_piece_id = EXCLUDED.content_piece_id, status = EXCLUDED.status`;
   }
 
   async upsertLead(lead: Omit<Lead, 'id' | 'createdAt'>): Promise<void> {

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { BrandMemory } from '@empleado/brand';
-import type { ContentPiece } from '@empleado/content';
+import type { CalendarSlot, ContentPiece } from '@empleado/content';
 import type { ActivityEntry } from '@empleado/shared';
 import type { ApprovalRequest, Lead, Store, StoredSocialAccount } from './store.js';
 
@@ -68,6 +68,18 @@ export class MemoryStore implements Store {
 
   async saveApproval(request: ApprovalRequest): Promise<void> {
     this.approvals.set(request.id, request);
+  }
+
+  private calendar = new Map<string, CalendarSlot>();
+
+  async listCalendar(tenantId: string, fromDate?: string): Promise<CalendarSlot[]> {
+    return [...this.calendar.values()]
+      .filter((s) => s.tenantId === tenantId && (!fromDate || s.date >= fromDate))
+      .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+  }
+
+  async saveCalendarSlot(slot: CalendarSlot): Promise<void> {
+    this.calendar.set(slot.id, slot);
   }
 
   async upsertLead(lead: Omit<Lead, 'id' | 'createdAt'>): Promise<void> {

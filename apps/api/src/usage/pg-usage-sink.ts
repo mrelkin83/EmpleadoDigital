@@ -1,4 +1,4 @@
-import postgres from 'postgres';
+import type postgres from 'postgres';
 import type { AIUsageRecord, UsageSink } from '@empleado/ai-core';
 
 /**

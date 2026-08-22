@@ -1,5 +1,5 @@
 import type { BrandMemory } from '@empleado/brand';
-import type { ContentPiece } from '@empleado/content';
+import type { CalendarSlot, ContentPiece } from '@empleado/content';
 import type { ActivityEntry } from '@empleado/shared';
 
 /**
@@ -59,6 +59,9 @@ export interface Store {
   listApprovals(tenantId: string, status?: ApprovalRequest['status']): Promise<ApprovalRequest[]>;
   getApproval(tenantId: string, id: string): Promise<ApprovalRequest | null>;
   saveApproval(request: ApprovalRequest): Promise<void>;
+
+  listCalendar(tenantId: string, fromDate?: string): Promise<CalendarSlot[]>;
+  saveCalendarSlot(slot: CalendarSlot): Promise<void>;
 
   upsertLead(lead: Omit<Lead, 'id' | 'createdAt'>): Promise<void>;
   listLeads(tenantId: string): Promise<Lead[]>;

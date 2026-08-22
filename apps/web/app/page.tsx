@@ -39,26 +39,42 @@ interface Health {
   instagramConnected: boolean;
 }
 
+interface Slot {
+  id: string;
+  date: string;
+  time: string;
+  format: string;
+  pillar: string;
+  funnel: string;
+  topic: string;
+  status: string;
+}
+
 export default function Dashboard() {
   const [health, setHealth] = useState<Health | null>(null);
   const [activity, setActivity] = useState<Activity[]>([]);
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [content, setContent] = useState<Piece[]>([]);
+  const [calendar, setCalendar] = useState<Slot[]>([]);
+  const [planning, setPlanning] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [h, a, ap, c] = await Promise.all([
+      const today = new Date().toISOString().slice(0, 10);
+      const [h, a, ap, c, cal] = await Promise.all([
         fetch('/health').then((r) => r.json()),
         fetch('/api/activity').then((r) => r.json()),
         fetch('/api/approvals?status=pending').then((r) => r.json()),
         fetch('/api/content').then((r) => r.json()),
+        fetch(`/api/calendar?from=${today}`).then((r) => r.json()),
       ]);
       setHealth(h);
       setActivity(a);
       setApprovals(ap);
       setContent(c);
+      setCalendar(cal.slots ?? []);
       setError(null);
     } catch {
       setError('No se pudo conectar con la API (npm run dev:api)');
@@ -89,6 +105,20 @@ export default function Dashboard() {
       await refresh();
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function onPlanWeek() {
+    setPlanning(true);
+    try {
+      await fetch('/api/calendar/plan-week', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      await refresh();
+    } finally {
+      setPlanning(false);
     }
   }
 
@@ -182,6 +212,29 @@ export default function Dashboard() {
               </li>
             ))}
           </ul>
+        </section>
+
+        <section className="card">
+          <h2>Próximamente · Calendario</h2>
+          {calendar.length === 0 && (
+            <p className="empty">Sin publicaciones planificadas para los próximos días.</p>
+          )}
+          <ul className="plain">
+            {calendar.slice(0, 7).map((s) => (
+              <li key={s.id}>
+                <span className={`badge ${s.status === 'planned' ? 'draft' : s.status}`}>{s.funnel}</span>
+                <strong>{s.topic}</strong>
+                <div className="muted">
+                  {s.date} {s.time} · {s.format} · {s.pillar}
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="actions">
+            <button className="small" onClick={onPlanWeek} disabled={planning}>
+              {planning ? 'Planificando…' : 'Planificar próxima semana'}
+            </button>
+          </div>
         </section>
 
         <section className="card">

@@ -2,7 +2,7 @@ import { ApprovalRequiredError, PolicyViolationError, logger } from '@empleado/s
 import type { BrandMemory } from '@empleado/brand';
 import { canTransition, runQualityGate, type ContentPiece } from '@empleado/content';
 import {
-  SocialPolicyEngine,
+  type SocialPolicyEngine,
   type InstagramConnector,
   type PolicyContext,
 } from '@empleado/social';

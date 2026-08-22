@@ -166,6 +166,67 @@ describe('API', () => {
     expect(body.missingScopes.length).toBeGreaterThan(0);
   });
 
+  it('PATCH /api/content/:id edita un borrador y devuelve el Quality Gate', async () => {
+    const gen = await app.inject({
+      method: 'POST',
+      url: '/api/content/generate',
+      payload: { pillar: 'Prevención', funnel: 'TOFU', topic: 'errores al importar', format: 'image' },
+    });
+    const pieceId = gen.json().piece.id;
+    const brand = (await app.inject({ method: 'GET', url: '/api/brand' })).json();
+    const disclaimer = brand.disclaimers[0];
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/content/${pieceId}`,
+      payload: {
+        hook: '¿Vas a importar? Lee esto antes de pagar.',
+        body: `Los cinco errores más comunes al importar y cómo evitarlos, con ejemplos reales. ${disclaimer}`,
+        cta: 'Guarda este post y compártelo.',
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.piece.hook).toContain('importar');
+    expect(body.qualityGate.passed).toBe(true); // editada a mano, ya pasa el gate
+
+    // Y ahora sí puede enviarse a revisión.
+    const submit = await app.inject({ method: 'POST', url: `/api/content/${pieceId}/submit` });
+    expect(submit.statusCode).toBe(200);
+    expect(submit.json().piece.status).toBe('in_review');
+  });
+
+  it('PATCH rechaza editar piezas publicadas', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/content/00000000-0000-0000-0000-00000000dead',
+      payload: { hook: 'x' },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('POST /api/calendar/plan-week crea la semana y no duplica al repetir', async () => {
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/calendar/plan-week',
+      payload: { weekStart: '2026-08-24' },
+    });
+    expect(first.statusCode).toBe(201);
+    expect(first.json().created.length).toBe(6);
+
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/calendar/plan-week',
+      payload: { weekStart: '2026-08-24' },
+    });
+    expect(second.json().created.length).toBe(0);
+    expect(second.json().skipped).toBe(6);
+
+    const list = await app.inject({ method: 'GET', url: '/api/calendar?from=2026-08-24' });
+    expect(list.json().slots.length).toBe(6);
+    expect(list.json().mix.balanced).toBe(true);
+  });
+
   it('GET /api/autonomy y PUT /api/autonomy funcionan', async () => {
     const get = await app.inject({ method: 'GET', url: '/api/autonomy' });
     expect(get.json().mode).toBe('copilot');

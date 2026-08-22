@@ -18,6 +18,21 @@ const publishSchema = z.object({
   humanApproved: z.boolean().default(false),
 });
 
+const editSchema = z
+  .object({
+    hook: z.string(),
+    body: z.string(),
+    cta: z.string(),
+    topic: z.string().min(3),
+    pillar: z.string().min(1),
+    funnel: z.enum(['TOFU', 'MOFU', 'BOFU']),
+    format: z.enum(['reel', 'carousel', 'image', 'story', 'text']),
+  })
+  .partial();
+
+/** Estados en los que una pieza es editable por el usuario. */
+const EDITABLE_STATUSES = new Set(['idea', 'draft', 'in_review', 'rejected']);
+
 export function registerContentRoutes(app: FastifyInstance, ctx: AppContext): void {
   app.get('/api/content', async () => {
     return ctx.store.listContent(DEFAULT_TENANT_ID);
@@ -56,6 +71,45 @@ export function registerContentRoutes(app: FastifyInstance, ctx: AppContext): vo
     });
 
     return reply.status(201).send({ piece, qualityGate: gate });
+  });
+
+  /**
+   * Edita un borrador (corregir el copy, añadir el disclaimer, cambiar CTA...).
+   * Una pieza rechazada vuelve a draft al editarse. Devuelve el Quality Gate actualizado.
+   */
+  app.patch('/api/content/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = editSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'invalid_body', details: parsed.error.flatten() });
+    }
+    const piece = await ctx.store.getContent(DEFAULT_TENANT_ID, id);
+    if (!piece) return reply.status(404).send({ error: 'not_found' });
+    if (!EDITABLE_STATUSES.has(piece.status)) {
+      return reply.status(409).send({
+        error: 'not_editable',
+        message: `Una pieza en estado "${piece.status}" no puede editarse.`,
+      });
+    }
+    const brand = await ctx.store.getBrand(DEFAULT_TENANT_ID);
+    if (!brand) return reply.status(409).send({ error: 'brand_memory_missing' });
+
+    // El .partial() de zod incluye claves con valor undefined; se eliminan para no
+    // sobreescribir campos existentes (exactOptionalPropertyTypes).
+    const changes = Object.fromEntries(
+      Object.entries(parsed.data).filter(([, v]) => v !== undefined),
+    ) as Partial<typeof piece>;
+    const updated = {
+      ...piece,
+      ...changes,
+      status: piece.status === 'rejected' ? ('draft' as const) : piece.status,
+      approval: 'pending' as const,
+      updatedAt: new Date(),
+    };
+    await ctx.store.saveContent(updated);
+
+    const gate = runQualityGate(updated, brand);
+    return { piece: updated, qualityGate: gate };
   });
 
   /** Envía una pieza a revisión y crea la solicitud de aprobación (human-in-the-loop). */

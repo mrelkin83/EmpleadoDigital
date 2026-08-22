@@ -1,4 +1,4 @@
-import postgres from 'postgres';
+import type postgres from 'postgres';
 import { logger } from '@empleado/shared';
 
 /**
