@@ -43,9 +43,20 @@ Endpoints verificados en developers.facebook.com el mismo día: authorize en `ww
 ### D13. `ai_usage` persistido en PostgreSQL
 `PgUsageSink` comparte el pool de `PgStore`; el presupuesto diario sobrevive reinicios. Con MemoryStore se mantiene el sink en memoria (solo dev).
 
+## 2026-08-22 — Avance sin app de Meta (mientras el usuario la crea)
+
+### D14. Calendario editorial: reglas deterministas + IA solo para temas
+`planWeek` garantiza el mix de funnel (TOFU 3 / MOFU 2 / BOFU 1, spec §20) y la rotación de pilares por código, no por prompt: las reglas de negocio nunca dependen de que el LLM "se porte bien". La IA solo propone los temas; si su salida no es utilizable (o es mock), los temas quedan explícitamente "Por definir" para el humano (spec §57). Idempotencia por fecha: replanificar la misma semana no duplica slots.
+
+### D15. Edición de borradores como parte del ciclo de aprobación
+`PATCH /api/content/:id` en estados idea/draft/in_review/rejected; editar una pieza rechazada la devuelve a draft y resetea la aprobación a pending. Cada edición devuelve el Quality Gate recalculado para que el usuario vea qué falta (p. ej. el disclaimer).
+
+### D16. ESLint ligero + CI
+Flat config con typescript-eslint recommended sin reglas type-checked (ese coste ya lo paga tsc strict). Workflow de GitHub Actions (typecheck → lint → test → build web) listo para cuando exista remoto.
+
 ## Pendientes conocidos (no implementar sin validar la fase)
-- Obtener `username` del perfil tras OAuth (GET /me) y validación E2E con una app de Meta real.
-- ESLint (gate actual: tsc strict; añadir linter en CI).
-- CI/CD (Fase 0 del roadmap; definir cuando exista remoto git).
+- Validación E2E del OAuth con una app de Meta real (bloqueado por: crear la app — ver docs/GUIA_APP_META.md).
+- Obtener `username` del perfil tras OAuth (GET /me).
+- Analytics con insights reales de Instagram (requiere cuenta conectada; no construir contra datos inventados).
+- Vincular slots del calendario con generación automática de piezas (Fase 2, orquestador).
 - RBAC y multiusuario (§32) al pasar de tenant único.
-- Analytics con insights reales (Fase 1) y calendario en UI.
