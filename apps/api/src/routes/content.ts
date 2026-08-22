@@ -7,9 +7,9 @@ import { randomUUID } from 'node:crypto';
 import { DEFAULT_TENANT_ID, type AppContext } from '../context.js';
 
 const generateSchema = z.object({
-  pillar: z.string().min(1),
+  pillar: z.string().min(1).max(80),
   funnel: z.enum(['TOFU', 'MOFU', 'BOFU']),
-  topic: z.string().min(3),
+  topic: z.string().min(3).max(200),
   format: z.enum(['reel', 'carousel', 'image', 'story', 'text']),
 });
 
@@ -20,15 +20,16 @@ const publishSchema = z.object({
 
 const editSchema = z
   .object({
-    hook: z.string(),
-    body: z.string(),
-    cta: z.string(),
-    topic: z.string().min(3),
-    pillar: z.string().min(1),
+    hook: z.string().max(500),
+    body: z.string().max(10000),
+    cta: z.string().max(500),
+    topic: z.string().min(3).max(200),
+    pillar: z.string().min(1).max(80),
     funnel: z.enum(['TOFU', 'MOFU', 'BOFU']),
     format: z.enum(['reel', 'carousel', 'image', 'story', 'text']),
   })
-  .partial();
+  .partial()
+  .strict();
 
 /** Estados en los que una pieza es editable por el usuario. */
 const EDITABLE_STATUSES = new Set(['idea', 'draft', 'in_review', 'rejected']);

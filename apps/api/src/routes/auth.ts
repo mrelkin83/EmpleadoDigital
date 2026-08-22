@@ -4,6 +4,7 @@ import {
   buildAuthorizeUrl,
   exchangeCodeForToken,
   exchangeForLongLivedToken,
+  fetchInstagramProfile,
   missingScopes,
   MVP_SCOPES,
 } from '@empleado/social';
@@ -89,12 +90,19 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext): void 
     const longLived = await exchangeForLongLivedToken(config.appSecret, shortLived.accessToken);
 
     const granted = shortLived.permissions.length ? shortLived.permissions : [...MVP_SCOPES];
+
+    // Perfil de la cuenta (no bloqueante: si falla, el username queda vacío).
+    const profile = await fetchInstagramProfile(longLived.accessToken).catch((err) => {
+      logger.warn({ err }, 'No se pudo leer el perfil tras el OAuth');
+      return null;
+    });
+
     const account = {
       id: randomUUID(),
       tenantId: DEFAULT_TENANT_ID,
       platform: 'instagram' as const,
-      externalAccountId: shortLived.userId,
-      username: '',
+      externalAccountId: profile?.userId || shortLived.userId,
+      username: profile?.username ?? '',
       tokenEncrypted: encryptSecret(longLived.accessToken, env.TOKEN_ENCRYPTION_KEY),
       tokenExpiresAt: longLived.expiresAt,
       grantedScopes: granted,

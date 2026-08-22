@@ -227,6 +227,78 @@ describe('API', () => {
     expect(list.json().mix.balanced).toBe(true);
   });
 
+  it('flujo Fase 2: definir tema en un slot y generar borradores desde el calendario', async () => {
+    // Planificar una semana distinta para no chocar con otros tests.
+    const plan = await app.inject({
+      method: 'POST',
+      url: '/api/calendar/plan-week',
+      payload: { weekStart: '2026-09-07' },
+    });
+    const slots = plan.json().created as Array<{ id: string; topic: string; date: string }>;
+    expect(slots.length).toBe(6);
+    // Con MockProvider, los temas quedan "Por definir".
+    expect(slots.every((s) => s.topic.startsWith('Por definir'))).toBe(true);
+
+    // Generar sin temas definidos: 0 generados, 6 reportados como pendientes de tema.
+    const empty = await app.inject({
+      method: 'POST',
+      url: '/api/calendar/generate-drafts',
+      payload: { weekStart: '2026-09-07' },
+    });
+    expect(empty.statusCode).toBe(200);
+    expect(empty.json().generated).toHaveLength(0);
+    expect(empty.json().skippedUndefinedTopic.length).toBeGreaterThanOrEqual(6);
+
+    // El humano define el tema de un slot...
+    const edit = await app.inject({
+      method: 'PATCH',
+      url: `/api/calendar/${slots[0]!.id}`,
+      payload: { topic: 'Checklist antes de tu primera importación desde China' },
+    });
+    expect(edit.statusCode).toBe(200);
+
+    // ...y el orquestador genera solo ese borrador.
+    const gen = await app.inject({
+      method: 'POST',
+      url: '/api/calendar/generate-drafts',
+      payload: { weekStart: '2026-09-07' },
+    });
+    expect(gen.statusCode).toBe(201);
+    const body = gen.json();
+    expect(body.generated).toHaveLength(1);
+    expect(body.generated[0].slotId).toBe(slots[0]!.id);
+
+    // El slot quedó vinculado a la pieza y en content_ready.
+    const list = await app.inject({ method: 'GET', url: '/api/calendar?from=2026-09-07' });
+    const updated = (list.json().slots as Array<{ id: string; status: string; contentPieceId?: string }>).find(
+      (s) => s.id === slots[0]!.id,
+    );
+    expect(updated?.status).toBe('content_ready');
+    expect(updated?.contentPieceId).toBe(body.generated[0].pieceId);
+
+    // Y la pieza existe como draft.
+    const piece = await app.inject({ method: 'GET', url: '/api/content' });
+    expect(piece.json().some((p: { id: string }) => p.id === body.generated[0].pieceId)).toBe(true);
+  });
+
+  it('PUT /api/brand valida estrictamente y rechaza campos desconocidos', async () => {
+    const bad = await app.inject({
+      method: 'PUT',
+      url: '/api/brand',
+      payload: { tenantId: 'hack', campoInventado: 1 },
+    });
+    expect(bad.statusCode).toBe(400);
+
+    const ok = await app.inject({
+      method: 'PUT',
+      url: '/api/brand',
+      payload: { niche: 'Derecho aduanero y comercio exterior', market: 'Colombia y Latam' },
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().market).toBe('Colombia y Latam');
+    expect(ok.json().tenantId).not.toBe('hack');
+  });
+
   it('GET /api/autonomy y PUT /api/autonomy funcionan', async () => {
     const get = await app.inject({ method: 'GET', url: '/api/autonomy' });
     expect(get.json().mode).toBe('copilot');

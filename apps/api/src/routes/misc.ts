@@ -16,13 +16,55 @@ export function registerMiscRoutes(app: FastifyInstance, ctx: AppContext): void 
     return brand ?? reply.status(404).send({ error: 'not_found' });
   });
 
+  // Validación estricta (spec §32: validación de inputs). Solo campos conocidos,
+  // con topes de longitud; el tenantId nunca es modificable desde la API.
+  const shortStr = z.string().max(200);
+  const brandUpdateSchema = z
+    .object({
+      brandName: z.string().min(1).max(120),
+      employeeName: z.string().max(120),
+      description: z.string().max(3000),
+      sector: shortStr,
+      niche: shortStr,
+      market: shortStr,
+      services: z.array(z.string().max(300)).max(50),
+      differentiators: z.array(z.string().max(300)).max(50),
+      audience: z.object({
+        segments: z.array(z.string().max(300)).max(50),
+        painPoints: z.array(z.string().max(300)).max(50),
+        goals: z.array(z.string().max(300)).max(50),
+      }),
+      voice: z.object({
+        tone: z.string().max(1000),
+        allowedWords: z.array(z.string().max(100)).max(200),
+        prohibitedWords: z.array(z.string().max(100)).max(200),
+        approvedClaims: z.array(z.string().max(300)).max(100),
+        languageCode: z.string().max(10),
+      }),
+      disclaimers: z.array(z.string().max(500)).max(20),
+      competitors: z.array(z.string().max(200)).max(50),
+      contentPillars: z.array(z.string().max(80)).min(1).max(20),
+    })
+    .partial()
+    .strict();
+
   app.put('/api/brand', async (request, reply) => {
-    const body = request.body as Record<string, unknown>;
+    const parsed = brandUpdateSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'invalid_body', details: parsed.error.flatten() });
+    }
     const current = await ctx.store.getBrand(DEFAULT_TENANT_ID);
     if (!current) return reply.status(404).send({ error: 'not_found' });
-    // Merge superficial controlado: el tenantId no es modificable.
-    const updated = { ...current, ...body, tenantId: DEFAULT_TENANT_ID };
-    await ctx.store.saveBrand(updated as typeof current);
+    const changes = Object.fromEntries(
+      Object.entries(parsed.data).filter(([, v]) => v !== undefined),
+    ) as Partial<typeof current>;
+    const updated = { ...current, ...changes, tenantId: DEFAULT_TENANT_ID };
+    await ctx.store.saveBrand(updated);
+    await ctx.logActivity({
+      actor: 'usuario',
+      kind: 'info',
+      summary: 'Actualizaste la memoria de marca.',
+    });
     return updated;
   });
 

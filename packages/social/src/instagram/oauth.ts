@@ -126,6 +126,27 @@ async function fetchLongLived(url: URL): Promise<LongLivedTokenResult> {
   };
 }
 
+export interface InstagramProfile {
+  userId: string;
+  username: string;
+}
+
+/** Perfil de la cuenta conectada (GET /me, documentado en el Get Started oficial). */
+export async function fetchInstagramProfile(accessToken: string): Promise<InstagramProfile> {
+  const url = new URL(`${GRAPH_BASE}/v21.0/me`);
+  url.searchParams.set('fields', 'user_id,username');
+  const response = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) {
+    throw new ProviderError('No se pudo obtener el perfil de Instagram', {
+      status: response.status,
+    });
+  }
+  const data = (await response.json()) as { user_id?: string | number; username?: string };
+  return { userId: String(data.user_id ?? ''), username: data.username ?? '' };
+}
+
 /** Validación post-conexión (spec §9): qué scopes del MVP faltan. */
 export function missingScopes(granted: string[], required: readonly string[] = MVP_SCOPES): string[] {
   return required.filter((s) => !granted.includes(s));

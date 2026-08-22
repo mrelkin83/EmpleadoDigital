@@ -130,7 +130,9 @@ export default function Dashboard() {
   return (
     <div className="container">
       <header className="top">
-        <h1>Empleado Digital · Marketing</h1>
+        <h1>
+          Empleado Digital · Marketing <a href="/marca" style={{ fontSize: '0.8rem' }}>Configurar marca</a>
+        </h1>
         <span className="status">
           <span className={`dot ${health?.instagramConnected ? 'ok' : 'off'}`} />
           {health
