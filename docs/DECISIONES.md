@@ -66,3 +66,11 @@ Flat config con typescript-eslint recommended sin reglas type-checked (ese coste
 - Mover generate-drafts a job del worker cuando se use proveedor real.
 - Rate limiting HTTP global (@fastify/rate-limit) antes de exponer la API a internet.
 - RBAC y multiusuario (§32) al pasar de tenant único.
+
+## 2026-08-24 — App de Meta real conectada (OAuth E2E completado)
+
+### D19. Subida de material propio (imagen/video) por pieza
+`POST /api/content/:id/media` (multipart, JPEG/PNG/MP4, tope 100 MB) guarda el archivo en `uploads/` (fuera del repo) y lo sirve en `/media/<uuid>` para que la API de Instagram lo descargue por el túnel/dominio público (origen derivado de `OAUTH_REDIRECT_URI`, sin variable nueva). El publish usa el material adjunto si no se pasa `imageUrl`; el video se acepta y almacena pero aún no se publica (el flujo de reels es distinto — fase posterior). Dashboard: botón "Subir material" por pieza y "Publicar en Instagram" (con confirmación) solo para piezas aprobadas con imagen.
+
+### D20. Bug corregido: el UPDATE de `saveContent` no persistía todos los campos editables
+El `ON CONFLICT DO UPDATE` omitía `format/pillar/funnel/topic` (y ahora `media`): el PATCH parecía funcionar (la respuesta usaba el objeto en memoria) pero el cambio se perdía. Regla derivada: si un endpoint permite editar un campo, el upsert debe incluirlo — revisar ambos lados al añadir campos.

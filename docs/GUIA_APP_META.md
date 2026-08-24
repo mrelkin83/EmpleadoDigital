@@ -2,7 +2,7 @@
 
 **Objetivo:** dejar funcionando la conexión oficial entre esta plataforma y la cuenta profesional de Instagram del caso piloto.
 **Tiempo estimado:** 30-45 minutos.
-**Verificada contra la documentación oficial de Meta el 2026-08-22.** Los nombres exactos de menús pueden variar ligeramente si Meta rediseña el panel; los conceptos no.
+**Verificada contra la documentación oficial de Meta el 2026-08-22 y contra el panel real el 2026-08-24** (app del piloto creada siguiendo estos pasos). Los nombres exactos de menús pueden variar ligeramente si Meta rediseña el panel; los conceptos no.
 
 ---
 
@@ -12,22 +12,29 @@
    - Instagram → Configuración → *Tipo de cuenta y herramientas* → *Cambiar a cuenta profesional*.
    - No requiere página de Facebook vinculada (ventaja de la variante "Instagram Login" que usamos).
 2. **Cuenta en Meta for Developers**: entra a https://developers.facebook.com con tu cuenta de Facebook y acepta los términos de desarrollador.
-3. El proyecto corriendo en local (`npm run dev:api`).
+3. El proyecto corriendo en local: PostgreSQL vía Docker Desktop (`docker compose up -d postgres`, luego `npm run db:migrate` la primera vez) y la API (`npm run dev:api`). Los scripts `dev:*` y `db:migrate` cargan el `.env` de la raíz automáticamente (flag `--env-file-if-exists` de Node); sin Docker, la API arranca en modo memoria (no persistente).
 
 ---
 
 ## Paso 1 — Crear la app
 
+El asistente actual de Meta tiene 5 pasos: *Detalles de la app → Casos de uso → Negocio → Requisitos → Resumen*. Ya **no existe** la pantalla de "tipo de app" (Empresa/Business); el tipo se asigna automáticamente según el caso de uso elegido.
+
 1. Ve a https://developers.facebook.com/apps y pulsa **Crear app**.
-2. Cuando pregunte el tipo/caso de uso, elige **Empresa (Business)**. *Esto es obligatorio: la API de Instagram con Instagram Login solo funciona en apps de tipo Business.*
-3. Nombre sugerido: `Empleado Digital Marketing` (o el nombre comercial que quieras). Email de contacto: el tuyo.
-4. No necesitas asociar un Business Manager todavía (se puede después).
+2. **Detalles de la app:** nombre sugerido `Empleado Digital Marketing` (o el nombre comercial que quieras) y tu email de contacto.
+3. **Casos de uso:** son ~20 con casillas de selección. Usa el filtro lateral **"Administración de contenido"** para encontrarlo rápido y marca **"Administrar mensajes y contenido en Instagram"** (el que menciona la API de Instagram con inicio de sesión de Instagram). Este caso de uso añade automáticamente el producto Instagram — luego puedes saltarte el Paso 2 de esta guía.
+4. **Negocio:** pregunta si conectas un portafolio comercial (Business Manager). Elige la opción de omitir / "todavía no"; se puede asociar después.
+5. **Requisitos:** pantalla solo informativa — "Verificación del negocio" y "Revisión de la app" son requisitos para *publicar* la app (fase SaaS), no bloquean el modo desarrollo. **Siguiente**.
+6. **Resumen:** confirma y pulsa **Crear app**.
+
+> Al crear la app pueden quedar seleccionados casos de uso extra (oEmbed, "Administrar todos los aspectos de tu página"). No estorban en modo desarrollo; se pueden eliminar desde **Personalizar** en cada uno, o dejar ahí.
 
 ## Paso 2 — Añadir el producto Instagram
 
-1. En el panel de la app, busca la sección **Agregar productos** (o *Products* en el menú lateral).
-2. Localiza **Instagram** y pulsa **Configurar**.
-3. En el menú lateral aparecerá **Instagram → Configuración de la API con inicio de sesión de Instagram** (*API setup with Instagram business login*). Entra ahí. **Esta es la pantalla principal donde harás casi todo.**
+> Si en el Paso 1 elegiste el caso de uso de Instagram, este paso ya está hecho.
+
+1. En **Casos de uso**, pulsa **Personalizar** en "Administrar mensajes y contenido en Instagram". Llegas a la pantalla **"API de Instagram" → Configuración de la API con inicio de sesión de Instagram**. **Esta es la pantalla principal donde harás casi todo.** Tiene 5 secciones numeradas: permisos, tokens de acceso/cuentas, webhooks, inicio de sesión de empresa y revisión de la app.
+2. En la **sección 1 (permisos)**, pulsa **"Add all required permissions"**. Ojo: eso agrega solo 3 permisos (`instagram_business_basic`, `instagram_business_manage_comments`, `instagram_business_manage_messages`). **Agrega también `instagram_business_content_publish`** desde **Permisos y funciones** (menú lateral) — sin él no se puede publicar.
 
 ## Paso 3 — Copiar las credenciales de la app
 
@@ -62,20 +69,28 @@ En esa misma pantalla (o en **Configuración de la app → Básica**):
 
 ## Paso 6 — Túnel HTTPS en desarrollo (ngrok, ya incluido en Laragon)
 
+ngrok requiere una **cuenta gratuita y su authtoken** (una sola vez; sin él falla con `ERR_NGROK_4018`):
+
+1. Crear cuenta en https://dashboard.ngrok.com/signup y copiar el token de https://dashboard.ngrok.com/get-started/your-authtoken
+2. Configurarlo y arrancar el túnel:
+
 ```powershell
 # Laragon trae ngrok en C:\laragon\bin\ngrok
+C:\laragon\bin\ngrok\ngrok.exe config add-authtoken TU_TOKEN   # solo la primera vez
 C:\laragon\bin\ngrok\ngrok.exe http 3001
 ```
 
-- Copia la URL `https://xxxx.ngrok-free.app` que te dé y úsala en los pasos 4 y 5 y en `OAUTH_REDIRECT_URI`.
+- Copia la URL pública que te dé (dominios actuales: `https://xxxx.ngrok-free.dev`) y úsala en los pasos 4 y 5 y en `OAUTH_REDIRECT_URI`. También se puede consultar en http://127.0.0.1:4040 con ngrok corriendo.
 - **La URL gratuita de ngrok cambia en cada arranque**: si reinicias ngrok, actualiza la Redirect URI y la Callback URL en el panel de Meta y el `.env`. (Cuando haya servidor propio con dominio, esto desaparece.)
 
 ## Paso 7 — Añadir la cuenta de Instagram como tester
 
 Mientras la app esté **en modo desarrollo** solo pueden conectarse cuentas autorizadas:
 
-1. En **Instagram → API setup**: sección de cuentas/testers, agrega la cuenta profesional del piloto (o en **Roles de la app → Roles**, añádela como *Instagram Tester*).
-2. Desde la app de Instagram de esa cuenta: Configuración → *Sitio web y permisos* (o *Apps y sitios web*) → **Invitaciones de testers** → aceptar.
+1. **Primero el rol, luego la cuenta.** Si pulsas "Agregar cuenta" (sección 2 de la pantalla de la API) sin haber asignado el rol, Meta devuelve **"Rol de desarrollador insuficiente"**. El orden correcto:
+   - **Roles de la app → Roles → Agregar personas → Tester de Instagram** → escribir el @usuario de la cuenta del piloto → enviar invitación.
+2. Desde esa cuenta de Instagram (más fácil en instagram.com): Configuración → *Sitio web y permisos* (o *Apps y sitios web*) → **Invitaciones de tester** → aceptar.
+3. Volver a **API de Instagram → sección 2 → Agregar cuenta** e iniciar sesión con la cuenta del piloto.
 
 ## Paso 8 — Completar el `.env` y conectar
 
@@ -95,9 +110,13 @@ Generar la clave de cifrado:
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-Reinicia la API (`npm run dev:api`), abre el dashboard (`npm run dev:web` → http://localhost:3000) y pulsa **Conectar Instagram**. Inicia sesión con la cuenta profesional, acepta los 4 permisos y volverás al dashboard con `?connect=ok`.
+Reinicia la API (`npm run dev:api`), abre el dashboard (`npm run dev:web` → http://localhost:3000) y pulsa **Conectar Instagram**. Inicia sesión con la cuenta profesional y acepta los 4 permisos.
+
+> Durante el callback aparecerá **una página de aviso de ngrok** ("You are about to visit..."): es el interstitial del plan gratuito, no un error. Pulsa **Visit Site** y el flujo continúa; solo sale una vez por navegador y no afecta a los webhooks (servidor-a-servidor). Al final vuelves al dashboard con `?connect=ok`.
 
 **Verificación:** `GET http://127.0.0.1:3001/api/social/status` debe mostrar `connected: true`, `via: "oauth"`, `missingScopes: []` y la fecha de vencimiento del token (~60 días; se refresca solo).
+
+> ✅ **Flujo completo verificado el 2026-08-24** con la app del piloto (`PedroAbogadoAduanero-IG`): webhook verificado por Meta vía túnel y OAuth conectado con los 4 scopes.
 
 ## Atajo mientras tanto (sin OAuth): token desde el panel
 
@@ -126,6 +145,10 @@ Con la app en desarrollo todo funciona **solo con las cuentas tester** — sufic
 
 | Síntoma | Causa probable |
 |---|---|
+| "Rol de desarrollador insuficiente" al agregar cuenta | La cuenta de Instagram no tiene rol de *Tester de Instagram* o no aceptó la invitación (Paso 7) |
+| `ERR_NGROK_4018` al arrancar ngrok | Falta configurar el authtoken (Paso 6) |
+| Página "You are about to visit..." de ngrok en el callback | Interstitial del plan gratuito: pulsar **Visit Site** y seguir (una vez por navegador) |
+| La API arranca "sin DATABASE_URL" teniendo `.env` | Estás en una versión vieja de los scripts; `dev:*` debe llevar `--env-file-if-exists=.env` |
 | `redirect_uri mismatch` al conectar | La URI del panel y `OAUTH_REDIRECT_URI` no son idénticas |
 | El panel no verifica el webhook | La API no está corriendo, el túnel cambió de URL, o `META_VERIFY_TOKEN` no coincide |
 | `invalid_state` en el callback | Pasaron >10 min entre pulsar conectar y autorizar; reintenta |
