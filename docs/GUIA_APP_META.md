@@ -137,6 +137,19 @@ Este atajo no tiene refresh automático ni cifrado en base de datos: es solo par
 
 ---
 
+## Limitación del modo desarrollo: comentarios y webhooks (verificado 2026-08-24)
+
+Con la app **sin publicar**, Meta bloquea en esta variante de la API:
+
+- **Todos los webhooks** (comments, messages, mentions): verificación y suscripción funcionan, pero no se entrega ningún evento — ni siquiera de cuentas tester.
+- **La lectura de comentarios por API**: `GET /{media-id}/comments` responde `data: []` con cursores de paginación presentes (los comentarios existen pero su contenido se oculta), también para comentarios de cuentas con rol.
+
+Lo que **sí funciona** en desarrollo con cuentas tester: OAuth, publicación de contenido, lectura de media propia e insights.
+
+**Mitigación implementada:** el Community Manager lee comentarios por *polling* (cada 2 min) inyectándolos al mismo pipeline que usarían los webhooks, con deduplicación persistente; empezará a ver datos en cuanto la app se publique, y los webhooks tomarán el relevo sin cambios de código.
+
+**Para publicar la app** (menú **Publicar** del panel; reemplazó al interruptor de modo Live): exige URL de política de privacidad (Configuración → Básica; servimos una en `/privacidad` vía el túnel — actualizarla si cambia la URL de ngrok) y **Verificación del negocio** — trámite con documentos del negocio que corresponde a la fase SaaS.
+
 ## App Review (para salir del modo desarrollo)
 
 Con la app en desarrollo todo funciona **solo con las cuentas tester** — suficiente para validar el MVP con el caso piloto. Para que cualquier cliente conecte su cuenta (fase SaaS), hay que pasar **App Review** de Meta solicitando acceso avanzado a los 4 permisos (`instagram_business_basic`, `instagram_business_content_publish`, `instagram_business_manage_comments`, `instagram_business_manage_messages`), con vídeo de demostración del flujo y política de privacidad publicada. Se documentará cuando lleguemos a esa fase; no bloquea nada del roadmap actual.

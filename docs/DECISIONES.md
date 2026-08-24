@@ -74,3 +74,6 @@ Flat config con typescript-eslint recommended sin reglas type-checked (ese coste
 
 ### D20. Bug corregido: el UPDATE de `saveContent` no persistía todos los campos editables
 El `ON CONFLICT DO UPDATE` omitía `format/pillar/funnel/topic` (y ahora `media`): el PATCH parecía funcionar (la respuesta usaba el objeto en memoria) pero el cambio se perdía. Regla derivada: si un endpoint permite editar un campo, el upsert debe incluirlo — revisar ambos lados al añadir campos.
+
+### D21. Community Manager por polling mientras la app no esté publicada
+Verificado empíricamente (2026-08-24): con la app sin publicar, Meta no entrega NINGÚN webhook (ni de testers) y `GET /{media}/comments` devuelve `data: []` con cursores (contenido oculto). Publicar la app exige Verificación del negocio (fase SaaS). Mitigación: poller cada 2 min (`apps/api/src/pipeline/comment-poller.ts`) que lee comentarios de las últimas publicaciones y los inyecta al MISMO pipeline de los webhooks, con dedupe persistente (`processed_comments`, migración 0005) para que la convivencia polling+webhooks nunca duplique. El fix del contenedor de publicación (sondear `status_code` hasta FINISHED antes de `media_publish`; error 9007 si no) quedó en el conector. Página `/privacidad` servida por la API para el requisito de publicación.
