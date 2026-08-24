@@ -85,10 +85,26 @@ export function registerMiscRoutes(app: FastifyInstance, ctx: AppContext): void 
   app.get('/api/leads', async () => ctx.store.listLeads(DEFAULT_TENANT_ID));
 
   // --- Autonomía (spec §10-11) ---
-  const autonomySchema = z.object({
-    mode: z.enum(['copilot', 'assisted', 'autonomous']),
-    requireApproval: z.record(z.boolean()).default({}),
-  });
+  // Solo las acciones 'configurable' de la matriz admiten override; las 'always'
+  // nunca se relajan por configuración (lo garantiza actionRequiresApproval).
+  const approvableAction = z.enum([
+    'content_idea',
+    'copy_draft',
+    'image_generation',
+    'calendar_creation',
+    'publish_content',
+    'reply_comment',
+    'reply_dm',
+    'paid_campaign',
+    'strategy_change',
+    'budget_change',
+  ]);
+  const autonomySchema = z
+    .object({
+      mode: z.enum(['copilot', 'assisted', 'autonomous']),
+      requireApproval: z.record(approvableAction, z.boolean()).default({}),
+    })
+    .strict();
 
   app.get('/api/autonomy', async () => ctx.autonomy);
 
@@ -98,6 +114,7 @@ export function registerMiscRoutes(app: FastifyInstance, ctx: AppContext): void 
       return reply.status(400).send({ error: 'invalid_body', details: parsed.error.flatten() });
     }
     ctx.autonomy = { ...ctx.autonomy, ...parsed.data };
+    await ctx.store.saveAutonomy(DEFAULT_TENANT_ID, ctx.autonomy);
     await ctx.logActivity({
       actor: 'sistema',
       kind: 'info',

@@ -56,6 +56,24 @@ interface Analytics {
   totals: Record<string, number>;
 }
 
+interface Autonomy {
+  mode: 'copilot' | 'assisted' | 'autonomous';
+  requireApproval: Record<string, boolean>;
+}
+
+const MODE_LABELS: Record<Autonomy['mode'], string> = {
+  copilot: 'Copiloto — todo pasa por tu aprobación',
+  assisted: 'Asistido — apruebas lo que elijas abajo',
+  autonomous: 'Autónomo — publica y responde solo (salvo lo marcado)',
+};
+
+/** Acciones configurables de la matriz; el resto es 'never'/'always' y no se toca. */
+const CONFIGURABLE_ACTIONS: Array<{ key: string; label: string }> = [
+  { key: 'publish_content', label: 'Publicar contenido' },
+  { key: 'reply_comment', label: 'Responder comentarios' },
+  { key: 'reply_dm', label: 'Responder mensajes (DM)' },
+];
+
 const METRIC_LABELS: Record<string, string> = {
   reach: 'Alcance',
   likes: 'Me gusta',
@@ -83,6 +101,7 @@ export default function Dashboard() {
   const [content, setContent] = useState<Piece[]>([]);
   const [calendar, setCalendar] = useState<Slot[]>([]);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
+  const [autonomy, setAutonomy] = useState<Autonomy | null>(null);
   const [planning, setPlanning] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [busyPiece, setBusyPiece] = useState<string | null>(null);
@@ -92,13 +111,14 @@ export default function Dashboard() {
   const refresh = useCallback(async () => {
     try {
       const today = new Date().toISOString().slice(0, 10);
-      const [h, a, ap, c, cal, an] = await Promise.all([
+      const [h, a, ap, c, cal, an, au] = await Promise.all([
         fetch('/health').then((r) => r.json()),
         fetch('/api/activity').then((r) => r.json()),
         fetch('/api/approvals?status=pending').then((r) => r.json()),
         fetch('/api/content').then((r) => r.json()),
         fetch(`/api/calendar?from=${today}`).then((r) => r.json()),
         fetch('/api/analytics').then((r) => r.json()),
+        fetch('/api/autonomy').then((r) => r.json()),
       ]);
       setHealth(h);
       setActivity(a);
@@ -106,6 +126,7 @@ export default function Dashboard() {
       setContent(c);
       setCalendar(cal.slots ?? []);
       setAnalytics(an);
+      setAutonomy(au);
       setError(null);
     } catch {
       setError('No se pudo conectar con la API (npm run dev:api)');
@@ -151,6 +172,16 @@ export default function Dashboard() {
     } finally {
       setPlanning(false);
     }
+  }
+
+  async function updateAutonomy(next: Autonomy) {
+    setAutonomy(next);
+    await fetch('/api/autonomy', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(next),
+    });
+    await refresh();
   }
 
   async function resolveApproval(id: string, action: 'approve' | 'reject') {
@@ -340,6 +371,56 @@ export default function Dashboard() {
               {planning ? 'Planificando…' : 'Planificar próxima semana'}
             </button>
           </div>
+        </section>
+
+        <section className="card">
+          <h2>Autonomía del empleado</h2>
+          {!autonomy && <p className="empty">Cargando…</p>}
+          {autonomy && (
+            <>
+              <select
+                value={autonomy.mode}
+                onChange={(e) =>
+                  void updateAutonomy({ ...autonomy, mode: e.target.value as Autonomy['mode'] })
+                }
+              >
+                {(Object.keys(MODE_LABELS) as Autonomy['mode'][]).map((m) => (
+                  <option key={m} value={m}>
+                    {MODE_LABELS[m]}
+                  </option>
+                ))}
+              </select>
+              <ul className="plain" style={{ marginTop: 8 }}>
+                {CONFIGURABLE_ACTIONS.map(({ key, label }) => (
+                  <li key={key}>
+                    <label style={{ cursor: autonomy.mode === 'copilot' ? 'default' : 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        disabled={autonomy.mode === 'copilot'}
+                        checked={
+                          autonomy.mode === 'copilot' || (autonomy.requireApproval[key] ?? true)
+                        }
+                        onChange={(e) =>
+                          void updateAutonomy({
+                            ...autonomy,
+                            requireApproval: {
+                              ...autonomy.requireApproval,
+                              [key]: e.target.checked,
+                            },
+                          })
+                        }
+                      />{' '}
+                      {label}: requiere mi aprobación
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              <p className="muted">
+                Campañas pagadas, cambios de estrategia y de presupuesto siempre requieren
+                aprobación humana (no configurable).
+              </p>
+            </>
+          )}
         </section>
 
         <section className="card">

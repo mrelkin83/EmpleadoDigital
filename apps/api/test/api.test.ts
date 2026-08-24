@@ -305,7 +305,7 @@ describe('API', () => {
     expect(ok.json().tenantId).not.toBe('hack');
   });
 
-  it('GET /api/autonomy y PUT /api/autonomy funcionan', async () => {
+  it('GET /api/autonomy y PUT /api/autonomy funcionan, persisten y validan estricto', async () => {
     const get = await app.inject({ method: 'GET', url: '/api/autonomy' });
     expect(get.json().mode).toBe('copilot');
     const put = await app.inject({
@@ -315,5 +315,17 @@ describe('API', () => {
     });
     expect(put.statusCode).toBe(200);
     expect(put.json().mode).toBe('assisted');
+
+    // Persistido en el store (sobrevive al contexto en memoria del request).
+    const again = await app.inject({ method: 'GET', url: '/api/autonomy' });
+    expect(again.json()).toMatchObject({ mode: 'assisted', requireApproval: { publish_content: true } });
+
+    // Hardening D18: claves desconocidas rechazadas.
+    const bad = await app.inject({
+      method: 'PUT',
+      url: '/api/autonomy',
+      payload: { mode: 'assisted', unknownField: true },
+    });
+    expect(bad.statusCode).toBe(400);
   });
 });

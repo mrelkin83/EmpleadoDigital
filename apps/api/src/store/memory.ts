@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { BrandMemory } from '@empleado/brand';
 import type { CalendarSlot, ContentPiece } from '@empleado/content';
-import type { ActivityEntry } from '@empleado/shared';
+import type { ActivityEntry, AutonomyConfig } from '@empleado/shared';
 import type { ApprovalRequest, Lead, Store, StoredSocialAccount } from './store.js';
 
 /** Almacenamiento en memoria para desarrollo sin base de datos. No persistente. */
@@ -13,6 +13,7 @@ export class MemoryStore implements Store {
   private leads = new Map<string, Lead>();
   private socialAccounts = new Map<string, StoredSocialAccount>();
   private processedComments = new Set<string>();
+  private autonomyConfigs = new Map<string, AutonomyConfig>();
 
   async getSocialAccount(tenantId: string, platform: string): Promise<StoredSocialAccount | null> {
     return this.socialAccounts.get(`${tenantId}:${platform}`) ?? null;
@@ -100,6 +101,14 @@ export class MemoryStore implements Store {
     if (this.processedComments.has(key)) return false;
     this.processedComments.add(key);
     return true;
+  }
+
+  async getAutonomy(tenantId: string): Promise<AutonomyConfig | null> {
+    return this.autonomyConfigs.get(tenantId) ?? null;
+  }
+
+  async saveAutonomy(tenantId: string, config: AutonomyConfig): Promise<void> {
+    this.autonomyConfigs.set(tenantId, config);
   }
 
   async close(): Promise<void> {

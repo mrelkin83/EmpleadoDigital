@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import postgres from 'postgres';
 import type { BrandMemory } from '@empleado/brand';
 import type { CalendarSlot, ContentPiece } from '@empleado/content';
-import type { ActivityEntry } from '@empleado/shared';
+import type { ActivityEntry, AutonomyConfig } from '@empleado/shared';
 import type { ApprovalRequest, Lead, Store, StoredSocialAccount } from './store.js';
 
 /** Persistencia PostgreSQL. Esquema en /db/migrations (ejecutar npm run db:migrate). */
@@ -200,6 +200,18 @@ export class PgStore implements Store {
       VALUES (${tenantId}, ${commentId})
       ON CONFLICT DO NOTHING`;
     return result.count > 0;
+  }
+
+  async getAutonomy(tenantId: string): Promise<AutonomyConfig | null> {
+    const rows = await this.sql`SELECT config FROM autonomy_config WHERE tenant_id = ${tenantId}`;
+    return rows.length ? (rows[0]!['config'] as AutonomyConfig) : null;
+  }
+
+  async saveAutonomy(tenantId: string, config: AutonomyConfig): Promise<void> {
+    await this.sql`
+      INSERT INTO autonomy_config (tenant_id, config, updated_at)
+      VALUES (${tenantId}, ${this.sql.json(config as unknown as postgres.JSONValue)}, now())
+      ON CONFLICT (tenant_id) DO UPDATE SET config = EXCLUDED.config, updated_at = now()`;
   }
 
   async close(): Promise<void> {

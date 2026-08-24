@@ -1,6 +1,6 @@
 import type { BrandMemory } from '@empleado/brand';
 import type { CalendarSlot, ContentPiece } from '@empleado/content';
-import type { ActivityEntry } from '@empleado/shared';
+import type { ActivityEntry, AutonomyConfig } from '@empleado/shared';
 
 /**
  * Capa de persistencia. Dos implementaciones:
@@ -68,6 +68,9 @@ export interface Store {
 
   /** Dedupe del polling de comentarios: true si es la primera vez que se ve el comentario. */
   markCommentProcessed(tenantId: string, commentId: string): Promise<boolean>;
+
+  getAutonomy(tenantId: string): Promise<AutonomyConfig | null>;
+  saveAutonomy(tenantId: string, config: AutonomyConfig): Promise<void>;
 
   close(): Promise<void>;
 }

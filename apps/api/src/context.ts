@@ -92,6 +92,13 @@ export async function buildContext(): Promise<AppContext> {
     },
   };
 
+  // Autonomía persistida del tenant (spec §10-11): sobrevive reinicios.
+  const storedAutonomy = await store.getAutonomy(DEFAULT_TENANT_ID);
+  if (storedAutonomy) {
+    ctx.autonomy = storedAutonomy;
+    logger.info({ mode: storedAutonomy.mode }, 'Configuración de autonomía restaurada');
+  }
+
   await restoreInstagramConnection(ctx);
   return ctx;
 }
