@@ -34,6 +34,17 @@ interface Brand {
   contentPillars: string[];
 }
 
+interface KeywordRule {
+  id?: string;
+  keyword: string;
+  aliases: string[];
+  matchType: 'exact' | 'contains' | 'word_boundary';
+  priority: number;
+  enabled: boolean;
+  cooldownMinutes: number;
+  responseTemplate: string;
+}
+
 const lines = (v: string) => v.split('\n').map((s) => s.trim()).filter(Boolean);
 const commas = (v: string) => v.split(',').map((s) => s.trim()).filter(Boolean);
 
@@ -41,13 +52,45 @@ export default function BrandPage() {
   const [brand, setBrand] = useState<Brand | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [rules, setRules] = useState<KeywordRule[]>([]);
+  const [savingRules, setSavingRules] = useState(false);
+  const [rulesMessage, setRulesMessage] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/brand')
       .then((r) => r.json())
       .then(setBrand)
       .catch(() => setMessage('No se pudo cargar la marca (¿API corriendo?)'));
+    fetch('/api/keywords')
+      .then((r) => r.json())
+      .then(setRules)
+      .catch(() => {});
   }, []);
+
+  function updateRule(index: number, changes: Partial<KeywordRule>) {
+    setRules((rs) => rs.map((r, i) => (i === index ? { ...r, ...changes } : r)));
+  }
+
+  async function onSaveRules() {
+    setSavingRules(true);
+    setRulesMessage(null);
+    try {
+      const res = await fetch('/api/keywords', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(rules),
+      });
+      if (res.ok) {
+        setRules(await res.json());
+        setRulesMessage('Reglas guardadas ✓');
+      } else {
+        const err = await res.json();
+        setRulesMessage(`Error: ${err.error}`);
+      }
+    } finally {
+      setSavingRules(false);
+    }
+  }
 
   async function onSave(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -202,6 +245,78 @@ export default function BrandPage() {
         </button>
         {message && <p className="muted">{message}</p>}
       </form>
+
+      <section className="card" style={{ marginTop: 16 }}>
+        <h2>Respuestas automáticas por palabra clave</h2>
+        <p className="muted">
+          Cuando un comentario o DM contiene la palabra clave, el empleado propone esta respuesta.
+          Su envío respeta tu configuración de autonomía (en Copiloto siempre te pide aprobación).
+        </p>
+        <ul className="plain">
+          {rules.map((r, i) => (
+            <li key={r.id ?? i} style={{ borderBottom: '1px solid var(--border, #ddd)', paddingBottom: 8 }}>
+              <div className="actions" style={{ alignItems: 'center' }}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={r.enabled}
+                    onChange={(e) => updateRule(i, { enabled: e.target.checked })}
+                  />{' '}
+                  activa
+                </label>
+                <input
+                  value={r.keyword}
+                  onChange={(e) => updateRule(i, { keyword: e.target.value })}
+                  placeholder="palabra clave"
+                  maxLength={80}
+                  style={{ width: 140 }}
+                />
+                <input
+                  value={r.aliases.join(', ')}
+                  onChange={(e) => updateRule(i, { aliases: commas(e.target.value) })}
+                  placeholder="sinónimos, separados por coma"
+                  style={{ flex: 1 }}
+                />
+                <button className="small secondary" onClick={() => setRules((rs) => rs.filter((_, j) => j !== i))}>
+                  Quitar
+                </button>
+              </div>
+              <textarea
+                value={r.responseTemplate}
+                onChange={(e) => updateRule(i, { responseTemplate: e.target.value })}
+                rows={2}
+                maxLength={1000}
+                style={{ width: '100%', marginTop: 4 }}
+              />
+            </li>
+          ))}
+        </ul>
+        <div className="actions">
+          <button
+            className="small secondary"
+            onClick={() =>
+              setRules((rs) => [
+                ...rs,
+                {
+                  keyword: '',
+                  aliases: [],
+                  matchType: 'word_boundary',
+                  priority: 100,
+                  enabled: true,
+                  cooldownMinutes: 1440,
+                  responseTemplate: '',
+                },
+              ])
+            }
+          >
+            Añadir regla
+          </button>
+          <button className="small" onClick={() => void onSaveRules()} disabled={savingRules}>
+            {savingRules ? 'Guardando…' : 'Guardar reglas'}
+          </button>
+        </div>
+        {rulesMessage && <p className="muted">{rulesMessage}</p>}
+      </section>
     </div>
   );
 }

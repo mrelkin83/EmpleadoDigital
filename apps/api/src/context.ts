@@ -8,6 +8,7 @@ import {
   KeywordMatcher,
   SocialPolicyEngine,
   refreshLongLivedToken,
+  type KeywordRule,
 } from '@empleado/social';
 import {
   DEFAULT_AUTONOMY,
@@ -99,6 +100,15 @@ export async function buildContext(): Promise<AppContext> {
     logger.info({ mode: storedAutonomy.mode }, 'Configuración de autonomía restaurada');
   }
 
+  // Reglas de keywords del CM: seed del piloto si no hay ninguna, y carga al matcher.
+  let rules = await store.listKeywordRules(DEFAULT_TENANT_ID);
+  if (rules.length === 0) {
+    rules = defaultPilotKeywordRules();
+    await store.replaceKeywordRules(DEFAULT_TENANT_ID, rules);
+    logger.info({ count: rules.length }, 'Reglas de keywords del piloto sembradas');
+  }
+  ctx.keywordMatcher.load(rules);
+
   await restoreInstagramConnection(ctx);
   return ctx;
 }
@@ -164,6 +174,48 @@ async function restoreInstagramConnection(ctx: AppContext): Promise<void> {
   }
 
   logger.warn('Instagram no conectado: usa /auth/instagram/login (OAuth) o variables INSTAGRAM_*');
+}
+
+/**
+ * Reglas iniciales del caso piloto (abogado aduanero). Son configuración: el
+ * usuario las edita en /marca. Toda respuesta pasa por Policy Engine + autonomía.
+ */
+function defaultPilotKeywordRules(): KeywordRule[] {
+  return [
+    {
+      id: randomUUID(),
+      keyword: 'asesoría',
+      aliases: ['asesoria', 'consulta', 'cita'],
+      matchType: 'word_boundary',
+      priority: 10,
+      enabled: true,
+      cooldownMinutes: 1440,
+      responseTemplate:
+        'Hola {{username}}, gracias por escribir. Cuéntame brevemente tu caso (importación, mercancía retenida o requerimiento de la DIAN) y te indico cómo agendar una revisión con el abogado.',
+    },
+    {
+      id: randomUUID(),
+      keyword: 'precio',
+      aliases: ['costo', 'cuánto cobra', 'cuanto cuesta', 'honorarios'],
+      matchType: 'contains',
+      priority: 20,
+      enabled: true,
+      cooldownMinutes: 1440,
+      responseTemplate:
+        'Hola {{username}}, los honorarios dependen del tipo de caso. Escríbeme qué necesitas (importación, retención de mercancía, requerimiento DIAN) y te comparto la información de la consulta inicial.',
+    },
+    {
+      id: randomUUID(),
+      keyword: 'retenida',
+      aliases: ['retenido', 'aprehendida', 'decomiso', 'me retuvieron'],
+      matchType: 'contains',
+      priority: 5,
+      enabled: true,
+      cooldownMinutes: 720,
+      responseTemplate:
+        'Hola {{username}}, entiendo la urgencia: los plazos aduaneros son cortos. Escríbeme por mensaje directo con el número de acta o documento que te entregaron y el abogado revisa tu caso.',
+    },
+  ];
 }
 
 /**

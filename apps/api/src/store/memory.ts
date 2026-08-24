@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { BrandMemory } from '@empleado/brand';
 import type { CalendarSlot, ContentPiece } from '@empleado/content';
 import type { ActivityEntry, AutonomyConfig } from '@empleado/shared';
+import type { KeywordRule } from '@empleado/social';
 import type { ApprovalRequest, ContentFeedback, Lead, Store, StoredSocialAccount } from './store.js';
 
 /** Almacenamiento en memoria para desarrollo sin base de datos. No persistente. */
@@ -15,6 +16,7 @@ export class MemoryStore implements Store {
   private processedComments = new Set<string>();
   private autonomyConfigs = new Map<string, AutonomyConfig>();
   private feedback: ContentFeedback[] = [];
+  private keywordRules = new Map<string, KeywordRule[]>();
 
   async getSocialAccount(tenantId: string, platform: string): Promise<StoredSocialAccount | null> {
     return this.socialAccounts.get(`${tenantId}:${platform}`) ?? null;
@@ -102,6 +104,14 @@ export class MemoryStore implements Store {
     if (this.processedComments.has(key)) return false;
     this.processedComments.add(key);
     return true;
+  }
+
+  async listKeywordRules(tenantId: string): Promise<KeywordRule[]> {
+    return this.keywordRules.get(tenantId) ?? [];
+  }
+
+  async replaceKeywordRules(tenantId: string, rules: KeywordRule[]): Promise<void> {
+    this.keywordRules.set(tenantId, rules);
   }
 
   async addContentFeedback(feedback: ContentFeedback): Promise<void> {

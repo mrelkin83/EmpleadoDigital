@@ -7,6 +7,7 @@ import {
 import { logger } from '@empleado/shared';
 import { getEnv } from '../env.js';
 import { handleCommentEvent } from '../pipeline/comment-pipeline.js';
+import { handleMessageEvent } from '../pipeline/message-pipeline.js';
 import type { AppContext } from '../context.js';
 
 /**
@@ -54,6 +55,10 @@ export function registerWebhookRoutes(app: FastifyInstance, ctx: AppContext): vo
           if (event.type === 'comment') {
             handleCommentEvent(ctx, event).catch((err) =>
               logger.error({ err }, 'Error procesando comentario'),
+            );
+          } else if (event.type === 'message') {
+            handleMessageEvent(ctx, event).catch((err) =>
+              logger.error({ err }, 'Error procesando DM'),
             );
           } else {
             logger.info({ type: event.type }, 'Evento de webhook recibido (handler pendiente)');

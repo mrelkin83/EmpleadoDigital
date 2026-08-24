@@ -1,6 +1,7 @@
 import type { BrandMemory } from '@empleado/brand';
 import type { CalendarSlot, ContentPiece } from '@empleado/content';
 import type { ActivityEntry, AutonomyConfig } from '@empleado/shared';
+import type { KeywordRule } from '@empleado/social';
 
 /**
  * Capa de persistencia. Dos implementaciones:
@@ -84,6 +85,10 @@ export interface Store {
 
   getAutonomy(tenantId: string): Promise<AutonomyConfig | null>;
   saveAutonomy(tenantId: string, config: AutonomyConfig): Promise<void>;
+
+  listKeywordRules(tenantId: string): Promise<KeywordRule[]>;
+  /** Reemplaza el set completo de reglas del tenant (edición atómica desde la UI). */
+  replaceKeywordRules(tenantId: string, rules: KeywordRule[]): Promise<void>;
 
   addContentFeedback(feedback: ContentFeedback): Promise<void>;
   /** Motivos de rechazo recientes (más nuevos primero), para inyectar en la generación. */

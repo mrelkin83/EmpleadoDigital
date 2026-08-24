@@ -3,6 +3,7 @@ import postgres from 'postgres';
 import type { BrandMemory } from '@empleado/brand';
 import type { CalendarSlot, ContentPiece } from '@empleado/content';
 import type { ActivityEntry, AutonomyConfig } from '@empleado/shared';
+import type { KeywordRule } from '@empleado/social';
 import type { ApprovalRequest, ContentFeedback, Lead, Store, StoredSocialAccount } from './store.js';
 
 /** Persistencia PostgreSQL. Esquema en /db/migrations (ejecutar npm run db:migrate). */
@@ -200,6 +201,35 @@ export class PgStore implements Store {
       VALUES (${tenantId}, ${commentId})
       ON CONFLICT DO NOTHING`;
     return result.count > 0;
+  }
+
+  async listKeywordRules(tenantId: string): Promise<KeywordRule[]> {
+    const rows = await this.sql`
+      SELECT * FROM keyword_rules WHERE tenant_id = ${tenantId} ORDER BY priority ASC`;
+    return rows.map((r) => ({
+      id: r['id'] as string,
+      keyword: r['keyword'] as string,
+      aliases: (r['aliases'] as string[]) ?? [],
+      matchType: r['match_type'] as KeywordRule['matchType'],
+      priority: r['priority'] as number,
+      enabled: r['enabled'] as boolean,
+      cooldownMinutes: r['cooldown_minutes'] as number,
+      responseTemplate: r['response_template'] as string,
+    }));
+  }
+
+  async replaceKeywordRules(tenantId: string, rules: KeywordRule[]): Promise<void> {
+    await this.sql.begin(async (tx) => {
+      await tx`DELETE FROM keyword_rules WHERE tenant_id = ${tenantId}`;
+      for (const r of rules) {
+        await tx`
+          INSERT INTO keyword_rules (id, tenant_id, keyword, aliases, match_type, priority,
+            enabled, cooldown_minutes, response_template, updated_at)
+          VALUES (${r.id}, ${tenantId}, ${r.keyword},
+            ${tx.json(r.aliases as unknown as postgres.JSONValue)}, ${r.matchType}, ${r.priority},
+            ${r.enabled}, ${r.cooldownMinutes}, ${r.responseTemplate}, now())`;
+      }
+    });
   }
 
   async addContentFeedback(f: ContentFeedback): Promise<void> {

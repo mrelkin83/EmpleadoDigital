@@ -127,6 +127,38 @@ export function registerMiscRoutes(app: FastifyInstance, ctx: AppContext): void 
     return ctx.autonomy;
   });
 
+  // --- Reglas de keywords del Community Manager (spec §26) ---
+  const keywordRuleSchema = z
+    .object({
+      id: z.string().uuid().optional(),
+      keyword: z.string().min(2).max(80),
+      aliases: z.array(z.string().min(2).max(80)).max(10).default([]),
+      matchType: z.enum(['exact', 'contains', 'word_boundary']).default('word_boundary'),
+      priority: z.number().int().min(0).max(1000).default(100),
+      enabled: z.boolean().default(true),
+      cooldownMinutes: z.number().int().min(0).max(43200).default(1440),
+      responseTemplate: z.string().min(5).max(1000),
+    })
+    .strict();
+
+  app.get('/api/keywords', async () => ctx.store.listKeywordRules(DEFAULT_TENANT_ID));
+
+  app.put('/api/keywords', async (request, reply) => {
+    const parsed = z.array(keywordRuleSchema).max(50).safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'invalid_body', details: parsed.error.flatten() });
+    }
+    const rules = parsed.data.map((r) => ({ ...r, id: r.id ?? randomUUID() }));
+    await ctx.store.replaceKeywordRules(DEFAULT_TENANT_ID, rules);
+    ctx.keywordMatcher.load(rules);
+    await ctx.logActivity({
+      actor: 'usuario',
+      kind: 'info',
+      summary: `Actualizaste las reglas de respuesta automática (${rules.length} reglas).`,
+    });
+    return rules;
+  });
+
   // --- Aprobaciones (human-in-the-loop, spec §40) ---
   app.get('/api/approvals', async (request) => {
     const { status } = request.query as { status?: 'pending' | 'approved' | 'rejected' };
