@@ -96,7 +96,7 @@ async function suggestTopics(
         brandContextForPrompt(input.brand),
         `Responde SOLO con un array JSON de ${funnels.length} strings (un tema concreto por publicación, en el orden dado).`,
       ].join('\n'),
-      prompt: `Propón temas para la semana que inicia ${input.weekStart}. Etapas del funnel en orden: ${funnels.join(', ')}.`,
+      prompt: `Propón temas para la semana que inicia ${input.weekStart}. Etapas del funnel en orden: ${funnels.join(', ')}. No antepongas la etapa ni el pilar al tema: solo el tema.`,
       maxTokens: 1024,
     },
   });
@@ -105,12 +105,20 @@ async function suggestTopics(
     const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(result.text);
     const parsed = JSON.parse(fenced?.[1] ?? result.text.slice(result.text.indexOf('['))) as unknown;
     if (Array.isArray(parsed) && parsed.every((t) => typeof t === 'string' && !t.includes('[MOCK]'))) {
-      return parsed as string[];
+      return (parsed as string[]).map(cleanTopic);
     }
   } catch {
     // salida no estructurada → sin sugerencias
   }
   return [];
+}
+
+/** Quita prefijos de etapa ("TOFU — ", "MOFU: ") que la IA a veces antepone, y limita longitud. */
+function cleanTopic(topic: string): string {
+  return topic
+    .replace(/^\s*(?:TOFU|MOFU|BOFU)\s*[—–:-]\s*/i, '')
+    .trim()
+    .slice(0, 200);
 }
 
 function objectiveFor(funnel: FunnelStage): string {
