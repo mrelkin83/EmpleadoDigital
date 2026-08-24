@@ -57,6 +57,13 @@ interface Analytics {
   totals: Record<string, number>;
 }
 
+interface Recommendation {
+  id: string;
+  priority: 'alta' | 'media' | 'baja';
+  title: string;
+  detail: string;
+}
+
 interface Autonomy {
   mode: 'copilot' | 'assisted' | 'autonomous';
   requireApproval: Record<string, boolean>;
@@ -103,6 +110,7 @@ export default function Dashboard() {
   const [calendar, setCalendar] = useState<Slot[]>([]);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [autonomy, setAutonomy] = useState<Autonomy | null>(null);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [planning, setPlanning] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [busyPiece, setBusyPiece] = useState<string | null>(null);
@@ -113,7 +121,7 @@ export default function Dashboard() {
   const refresh = useCallback(async () => {
     try {
       const today = new Date().toISOString().slice(0, 10);
-      const [h, a, ap, c, cal, an, au] = await Promise.all([
+      const [h, a, ap, c, cal, an, au, rec] = await Promise.all([
         fetch('/health').then((r) => r.json()),
         fetch('/api/activity').then((r) => r.json()),
         fetch('/api/approvals?status=pending').then((r) => r.json()),
@@ -121,6 +129,7 @@ export default function Dashboard() {
         fetch(`/api/calendar?from=${today}`).then((r) => r.json()),
         fetch('/api/analytics').then((r) => r.json()),
         fetch('/api/autonomy').then((r) => r.json()),
+        fetch('/api/recommendations').then((r) => r.json()),
       ]);
       setHealth(h);
       setActivity(a);
@@ -129,6 +138,7 @@ export default function Dashboard() {
       setCalendar(cal.slots ?? []);
       setAnalytics(an);
       setAutonomy(au);
+      setRecommendations(rec.recommendations ?? []);
       setError(null);
     } catch {
       setError('No se pudo conectar con la API (npm run dev:api)');
@@ -435,6 +445,24 @@ export default function Dashboard() {
               {planning ? 'Planificando…' : 'Planificar próxima semana'}
             </button>
           </div>
+        </section>
+
+        <section className="card">
+          <h2>Recomendaciones del analista</h2>
+          {recommendations.length === 0 && (
+            <p className="empty">Sin recomendaciones: todo marcha según el plan.</p>
+          )}
+          <ul className="plain">
+            {recommendations.map((r) => (
+              <li key={r.id}>
+                <span className={`badge ${r.priority === 'alta' ? 'rejected' : r.priority === 'media' ? 'pending' : 'draft'}`}>
+                  {r.priority}
+                </span>
+                <strong>{r.title}</strong>
+                <div className="muted">{r.detail}</div>
+              </li>
+            ))}
+          </ul>
         </section>
 
         <section className="card">

@@ -54,6 +54,17 @@ describe('API', () => {
     expect(notScheduled.statusCode).toBe(409);
   });
 
+  it('GET /api/recommendations produce recomendaciones deterministas del analista', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/recommendations' });
+    expect(res.statusCode).toBe(200);
+    const { recommendations } = res.json();
+    expect(Array.isArray(recommendations)).toBe(true);
+    // Estado de prueba: sin publicaciones ni calendario → ambas recomendaciones presentes.
+    const ids = recommendations.map((r: { id: string }) => r.id);
+    expect(ids).toContain('no-posts');
+    expect(ids).toContain('no-calendar');
+  });
+
   it('GET /api/brand devuelve la Brand Memory del piloto (seed)', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/brand' });
     expect(res.statusCode).toBe(200);
