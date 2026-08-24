@@ -229,7 +229,15 @@ export default function Dashboard() {
   }
 
   async function resolveApproval(id: string, action: 'approve' | 'reject') {
-    await fetch(`/api/approvals/${id}/${action}`, { method: 'POST' });
+    let reason: string | undefined;
+    if (action === 'reject') {
+      reason = prompt('¿Por qué la rechazas? (opcional — el empleado aprende de esto)') || undefined;
+    }
+    await fetch(`/api/approvals/${id}/${action}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(reason ? { reason } : {}),
+    });
     await refresh();
   }
 

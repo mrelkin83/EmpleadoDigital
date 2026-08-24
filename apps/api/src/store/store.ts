@@ -29,6 +29,19 @@ export interface Lead {
   createdAt: Date;
 }
 
+/** Feedback binario del usuario sobre una pieza (semilla del AI-Match propio, D24). */
+export interface ContentFeedback {
+  id: string;
+  tenantId: string;
+  pieceId: string;
+  verdict: 'approved' | 'rejected';
+  reason?: string;
+  pillar: string;
+  funnel: string;
+  format: string;
+  createdAt: Date;
+}
+
 export interface StoredSocialAccount {
   id: string;
   tenantId: string;
@@ -71,6 +84,10 @@ export interface Store {
 
   getAutonomy(tenantId: string): Promise<AutonomyConfig | null>;
   saveAutonomy(tenantId: string, config: AutonomyConfig): Promise<void>;
+
+  addContentFeedback(feedback: ContentFeedback): Promise<void>;
+  /** Motivos de rechazo recientes (más nuevos primero), para inyectar en la generación. */
+  listRecentRejectionReasons(tenantId: string, limit?: number): Promise<string[]>;
 
   close(): Promise<void>;
 }

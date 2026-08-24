@@ -3,7 +3,7 @@ import postgres from 'postgres';
 import type { BrandMemory } from '@empleado/brand';
 import type { CalendarSlot, ContentPiece } from '@empleado/content';
 import type { ActivityEntry, AutonomyConfig } from '@empleado/shared';
-import type { ApprovalRequest, Lead, Store, StoredSocialAccount } from './store.js';
+import type { ApprovalRequest, ContentFeedback, Lead, Store, StoredSocialAccount } from './store.js';
 
 /** Persistencia PostgreSQL. Esquema en /db/migrations (ejecutar npm run db:migrate). */
 export class PgStore implements Store {
@@ -200,6 +200,21 @@ export class PgStore implements Store {
       VALUES (${tenantId}, ${commentId})
       ON CONFLICT DO NOTHING`;
     return result.count > 0;
+  }
+
+  async addContentFeedback(f: ContentFeedback): Promise<void> {
+    await this.sql`
+      INSERT INTO content_feedback (id, tenant_id, piece_id, verdict, reason, pillar, funnel, format, created_at)
+      VALUES (${f.id}, ${f.tenantId}, ${f.pieceId}, ${f.verdict}, ${f.reason ?? null},
+        ${f.pillar}, ${f.funnel}, ${f.format}, ${f.createdAt})`;
+  }
+
+  async listRecentRejectionReasons(tenantId: string, limit = 5): Promise<string[]> {
+    const rows = await this.sql`
+      SELECT reason FROM content_feedback
+      WHERE tenant_id = ${tenantId} AND verdict = 'rejected' AND reason IS NOT NULL
+      ORDER BY created_at DESC LIMIT ${limit}`;
+    return rows.map((r) => r['reason'] as string);
   }
 
   async getAutonomy(tenantId: string): Promise<AutonomyConfig | null> {

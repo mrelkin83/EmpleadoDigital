@@ -68,10 +68,12 @@ export function registerContentRoutes(app: FastifyInstance, ctx: AppContext): vo
     const brand = await ctx.store.getBrand(DEFAULT_TENANT_ID);
     if (!brand) return reply.status(409).send({ error: 'brand_memory_missing' });
 
+    const rejectionFeedback = await ctx.store.listRecentRejectionReasons(DEFAULT_TENANT_ID);
     const piece = await generateCaption(ctx.router, {
       tenantId: DEFAULT_TENANT_ID,
       brand,
       ...parsed.data,
+      ...(rejectionFeedback.length ? { rejectionFeedback } : {}),
     });
     await ctx.store.saveContent(piece);
 

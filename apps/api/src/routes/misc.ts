@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { canTransition } from '@empleado/content';
@@ -40,6 +41,9 @@ export function registerMiscRoutes(app: FastifyInstance, ctx: AppContext): void 
         segments: z.array(z.string().max(300)).max(50),
         painPoints: z.array(z.string().max(300)).max(50),
         goals: z.array(z.string().max(300)).max(50),
+        location: z.string().max(200).optional(),
+        ageRange: z.string().max(30).optional(),
+        interests: z.array(z.string().max(80)).max(30).optional(),
       }),
       voice: z.object({
         tone: z.string().max(1000),
@@ -129,11 +133,18 @@ export function registerMiscRoutes(app: FastifyInstance, ctx: AppContext): void 
     return ctx.store.listApprovals(DEFAULT_TENANT_ID, status);
   });
 
+  const resolveSchema = z.object({ reason: z.string().max(500).optional() }).strict();
+
   app.post('/api/approvals/:id/:action', async (request, reply) => {
     const { id, action } = request.params as { id: string; action: string };
     if (action !== 'approve' && action !== 'reject') {
       return reply.status(400).send({ error: 'invalid_action' });
     }
+    const parsedBody = resolveSchema.safeParse(request.body ?? {});
+    if (!parsedBody.success) {
+      return reply.status(400).send({ error: 'invalid_body', details: parsedBody.error.flatten() });
+    }
+    const reason = parsedBody.data.reason?.trim();
     const approval = await ctx.store.getApproval(DEFAULT_TENANT_ID, id);
     if (!approval) return reply.status(404).send({ error: 'not_found' });
     if (approval.status !== 'pending') {
@@ -160,6 +171,18 @@ export function registerMiscRoutes(app: FastifyInstance, ctx: AppContext): void 
             updatedAt: new Date(),
           });
         }
+        // Feedback binario persistido (D24): semilla del AI-Match propio.
+        await ctx.store.addContentFeedback({
+          id: randomUUID(),
+          tenantId: DEFAULT_TENANT_ID,
+          pieceId: piece.id,
+          verdict: target,
+          ...(reason ? { reason } : {}),
+          pillar: piece.pillar,
+          funnel: piece.funnel,
+          format: piece.format,
+          createdAt: new Date(),
+        });
       }
     }
 

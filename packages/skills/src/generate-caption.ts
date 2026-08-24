@@ -15,6 +15,8 @@ export interface GenerateCaptionInput {
   funnel: FunnelStage;
   topic: string;
   format: ContentFormat;
+  /** Motivos de rechazos recientes del cliente: preferencias aprendidas (D24). */
+  rejectionFeedback?: string[];
 }
 
 export async function generateCaption(
@@ -26,8 +28,13 @@ export async function generateCaption(
     'Contexto de marca:',
     brandContextForPrompt(input.brand),
     'Reglas: no inventes leyes ni artículos; no prometas resultados; el contenido educativo lleva el disclaimer de la marca al final del cuerpo.',
+    input.rejectionFeedback?.length
+      ? `Preferencias aprendidas — el cliente rechazó piezas anteriores por estos motivos, evítalos: ${input.rejectionFeedback.join(' | ')}`
+      : '',
     'Responde SOLO con JSON: {"hook": string, "body": string, "cta": string}',
-  ].join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   const prompt = `Crea el contenido para una publicación tipo "${input.format}" del pilar "${input.pillar}" (etapa ${input.funnel}) sobre el tema: ${input.topic}`;
 

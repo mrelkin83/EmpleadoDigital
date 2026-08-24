@@ -28,6 +28,14 @@ export interface AudienceProfile {
   segments: string[];
   painPoints: string[];
   goals: string[];
+  /**
+   * Audiencia objetivo declarativa (a quién le hablamos). Alimenta la generación
+   * de contenido — tono, temas, ejemplos — NUNCA targeting de engagement hacia
+   * terceros (nivel 4 del documento rector).
+   */
+  location?: string;
+  ageRange?: string;
+  interests?: string[];
 }
 
 export interface BrandVoice {
@@ -55,6 +63,15 @@ export function brandContextForPrompt(memory: BrandMemory): string {
     `Servicios: ${memory.services.join('; ')}.`,
     `Diferenciadores: ${memory.differentiators.join('; ')}.`,
     `Audiencia: ${memory.audience.segments.join('; ')}. Dolores: ${memory.audience.painPoints.join('; ')}.`,
+    [
+      memory.audience.location ? `Ubicación de la audiencia: ${memory.audience.location}.` : '',
+      memory.audience.ageRange ? `Rango de edad: ${memory.audience.ageRange}.` : '',
+      memory.audience.interests?.length
+        ? `Intereses/temas afines: ${memory.audience.interests.join(', ')}.`
+        : '',
+    ]
+      .filter(Boolean)
+      .join(' '),
     `Tono: ${memory.voice.tone}. Idioma: ${memory.voice.languageCode}.`,
     memory.voice.prohibitedWords.length
       ? `Palabras PROHIBIDAS (no usar nunca): ${memory.voice.prohibitedWords.join(', ')}.`

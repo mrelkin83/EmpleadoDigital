@@ -14,7 +14,14 @@ interface Brand {
   market: string;
   services: string[];
   differentiators: string[];
-  audience: { segments: string[]; painPoints: string[]; goals: string[] };
+  audience: {
+    segments: string[];
+    painPoints: string[];
+    goals: string[];
+    location?: string;
+    ageRange?: string;
+    interests?: string[];
+  };
   voice: {
     tone: string;
     allowedWords: string[];
@@ -61,6 +68,15 @@ export default function BrandPage() {
           segments: lines(String(form.get('segments') ?? '')),
           painPoints: lines(String(form.get('painPoints') ?? '')),
           goals: brand.audience.goals,
+          ...(String(form.get('location') ?? '').trim()
+            ? { location: String(form.get('location')).trim() }
+            : {}),
+          ...(String(form.get('ageRange') ?? '').trim()
+            ? { ageRange: String(form.get('ageRange')).trim() }
+            : {}),
+          ...(commas(String(form.get('interests') ?? '')).length
+            ? { interests: commas(String(form.get('interests') ?? '')) }
+            : {}),
         },
         voice: {
           ...brand.voice,
@@ -138,6 +154,32 @@ export default function BrandPage() {
         <label>
           Dolores de la audiencia (uno por línea)
           <textarea name="painPoints" defaultValue={brand.audience.painPoints.join('\n')} rows={4} />
+        </label>
+        <label>
+          Ubicación de la audiencia (opcional)
+          <input
+            name="location"
+            defaultValue={brand.audience.location ?? ''}
+            maxLength={200}
+            placeholder="ej. Colombia, principales ciudades y zonas de frontera"
+          />
+        </label>
+        <label>
+          Rango de edad (opcional)
+          <input
+            name="ageRange"
+            defaultValue={brand.audience.ageRange ?? ''}
+            maxLength={30}
+            placeholder="ej. 28-55"
+          />
+        </label>
+        <label>
+          Intereses / temas afines (separados por coma, opcional)
+          <input
+            name="interests"
+            defaultValue={(brand.audience.interests ?? []).join(', ')}
+            placeholder="ej. importaciones, comercio exterior, emprendimiento"
+          />
         </label>
         <label>
           Tono de voz

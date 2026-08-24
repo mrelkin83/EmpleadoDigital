@@ -109,6 +109,7 @@ export function registerCalendarRoutes(app: FastifyInstance, ctx: AppContext): v
     const undefinedTopics = candidates.filter((s) => !topicIsDefined(s.topic));
 
     const results = [];
+    const rejectionFeedback = await ctx.store.listRecentRejectionReasons(DEFAULT_TENANT_ID);
     for (const slot of ready) {
       const piece = await generateCaption(ctx.router, {
         tenantId: DEFAULT_TENANT_ID,
@@ -117,6 +118,7 @@ export function registerCalendarRoutes(app: FastifyInstance, ctx: AppContext): v
         funnel: slot.funnel,
         topic: slot.topic,
         format: slot.format,
+        ...(rejectionFeedback.length ? { rejectionFeedback } : {}),
       });
       await ctx.store.saveContent(piece);
       await ctx.store.saveCalendarSlot({ ...slot, contentPieceId: piece.id, status: 'content_ready' });
