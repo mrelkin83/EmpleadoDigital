@@ -32,6 +32,7 @@ interface Piece {
   hook: string;
   status: string;
   approval: string;
+  scheduledAt?: string;
   media?: { filename: string; mime: string; kind: 'image' | 'video' };
 }
 
@@ -105,6 +106,7 @@ export default function Dashboard() {
   const [planning, setPlanning] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [busyPiece, setBusyPiece] = useState<string | null>(null);
+  const [scheduleAt, setScheduleAt] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -182,6 +184,38 @@ export default function Dashboard() {
       body: JSON.stringify(next),
     });
     await refresh();
+  }
+
+  async function onSchedule(pieceId: string) {
+    const value = scheduleAt[pieceId];
+    if (!value) {
+      setNotice('Elige fecha y hora antes de programar.');
+      return;
+    }
+    setBusyPiece(pieceId);
+    try {
+      const res = await fetch(`/api/content/${pieceId}/schedule`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheduledAt: new Date(value).toISOString() }),
+      });
+      const data = await res.json();
+      setNotice(res.ok ? 'Pieza programada.' : `No se programó: ${data.message ?? data.error}`);
+      await refresh();
+    } finally {
+      setBusyPiece(null);
+    }
+  }
+
+  async function onUnschedule(pieceId: string) {
+    setBusyPiece(pieceId);
+    try {
+      await fetch(`/api/content/${pieceId}/unschedule`, { method: 'POST' });
+      setNotice('Programación cancelada.');
+      await refresh();
+    } finally {
+      setBusyPiece(null);
+    }
   }
 
   async function resolveApproval(id: string, action: 'approve' | 'reject') {
@@ -318,8 +352,22 @@ export default function Dashboard() {
                 <div className="muted">
                   {p.format} · {p.pillar} · {p.funnel}
                   {p.media && <> · 📎 {p.media.kind === 'image' ? 'imagen' : 'video'} adjunto</>}
+                  {p.status === 'scheduled' && p.scheduledAt && (
+                    <> · ⏰ programada: {new Date(p.scheduledAt).toLocaleString('es-CO')}</>
+                  )}
                 </div>
-                {p.status !== 'published' && (
+                {p.status === 'scheduled' && (
+                  <div className="actions">
+                    <button
+                      className="small secondary"
+                      disabled={busyPiece === p.id}
+                      onClick={() => void onUnschedule(p.id)}
+                    >
+                      Cancelar programación
+                    </button>
+                  </div>
+                )}
+                {p.status !== 'published' && p.status !== 'scheduled' && (
                   <div className="actions">
                     <label className="small secondary" style={{ cursor: 'pointer' }}>
                       {busyPiece === p.id ? 'Procesando…' : p.media ? 'Cambiar material' : 'Subir material'}
@@ -335,13 +383,29 @@ export default function Dashboard() {
                       />
                     </label>
                     {p.status === 'approved' && p.media?.kind === 'image' && (
-                      <button
-                        className="small"
-                        disabled={busyPiece === p.id}
-                        onClick={() => void onPublish(p.id)}
-                      >
-                        Publicar en Instagram
-                      </button>
+                      <>
+                        <button
+                          className="small"
+                          disabled={busyPiece === p.id}
+                          onClick={() => void onPublish(p.id)}
+                        >
+                          Publicar ya
+                        </button>
+                        <input
+                          type="datetime-local"
+                          value={scheduleAt[p.id] ?? ''}
+                          onChange={(e) =>
+                            setScheduleAt((s) => ({ ...s, [p.id]: e.target.value }))
+                          }
+                        />
+                        <button
+                          className="small"
+                          disabled={busyPiece === p.id || !scheduleAt[p.id]}
+                          onClick={() => void onSchedule(p.id)}
+                        >
+                          Programar
+                        </button>
+                      </>
                     )}
                   </div>
                 )}

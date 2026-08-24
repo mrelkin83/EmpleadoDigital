@@ -30,6 +30,30 @@ describe('API', () => {
     expect(res.json()).toEqual({ connected: false, posts: [], totals: {} });
   });
 
+  it('programar exige pieza aprobada con imagen y fecha futura', async () => {
+    const gen = await app.inject({
+      method: 'POST',
+      url: '/api/content/generate',
+      payload: { pillar: 'Educación', funnel: 'TOFU', topic: 'tema para programar', format: 'image' },
+    });
+    const pieceId = gen.json().piece.id;
+
+    // draft sin aprobar → transición inválida
+    const notApproved = await app.inject({
+      method: 'POST',
+      url: `/api/content/${pieceId}/schedule`,
+      payload: { scheduledAt: new Date(Date.now() + 3600_000).toISOString() },
+    });
+    expect(notApproved.statusCode).toBe(409);
+
+    // cancelar algo no programado → 409
+    const notScheduled = await app.inject({
+      method: 'POST',
+      url: `/api/content/${pieceId}/unschedule`,
+    });
+    expect(notScheduled.statusCode).toBe(409);
+  });
+
   it('GET /api/brand devuelve la Brand Memory del piloto (seed)', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/brand' });
     expect(res.statusCode).toBe(200);

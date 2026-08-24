@@ -212,6 +212,69 @@ export function registerContentRoutes(app: FastifyInstance, ctx: AppContext): vo
     return { piece: updated, qualityGate: gate };
   });
 
+  /**
+   * Programa una pieza aprobada para publicación automática (spec §42: approved→scheduled).
+   * Requiere material subido: a la hora programada no habrá humano para aportar la imagen.
+   */
+  app.post('/api/content/:id/schedule', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z
+      .object({ scheduledAt: z.coerce.date() })
+      .strict()
+      .safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'invalid_body', details: parsed.error.flatten() });
+    }
+    const piece = await ctx.store.getContent(DEFAULT_TENANT_ID, id);
+    if (!piece) return reply.status(404).send({ error: 'not_found' });
+    if (!canTransition(piece.status, 'scheduled')) {
+      return reply.status(409).send({ error: 'invalid_transition', from: piece.status });
+    }
+    if (!piece.media || piece.media.kind !== 'image') {
+      return reply.status(400).send({
+        error: 'media_missing',
+        message: 'Sube la imagen de la pieza antes de programarla.',
+      });
+    }
+    if (parsed.data.scheduledAt.getTime() <= Date.now()) {
+      return reply.status(400).send({ error: 'past_date', message: 'La fecha debe ser futura.' });
+    }
+
+    const updated = {
+      ...piece,
+      status: 'scheduled' as const,
+      scheduledAt: parsed.data.scheduledAt,
+      updatedAt: new Date(),
+    };
+    await ctx.store.saveContent(updated);
+    await ctx.logActivity({
+      actor: 'orquestador',
+      kind: 'info',
+      summary: `Programé "${piece.hook || piece.topic}" para ${parsed.data.scheduledAt.toLocaleString('es-CO')}.`,
+    });
+    return { piece: updated };
+  });
+
+  /** Cancela la programación: la pieza vuelve a 'approved' (transición del spec §42). */
+  app.post('/api/content/:id/unschedule', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const piece = await ctx.store.getContent(DEFAULT_TENANT_ID, id);
+    if (!piece) return reply.status(404).send({ error: 'not_found' });
+    if (piece.status !== 'scheduled') {
+      return reply.status(409).send({ error: 'not_scheduled', from: piece.status });
+    }
+    const rest = { ...piece };
+    delete rest.scheduledAt;
+    const updated = { ...rest, status: 'approved' as const, updatedAt: new Date() };
+    await ctx.store.saveContent(updated);
+    await ctx.logActivity({
+      actor: 'orquestador',
+      kind: 'info',
+      summary: `Cancelé la programación de "${piece.hook || piece.topic}".`,
+    });
+    return { piece: updated };
+  });
+
   /** Publica una pieza aprobada vía skill publish_post (Quality Gate + Policy Engine + API oficial). */
   app.post('/api/content/:id/publish', async (request, reply) => {
     const { id } = request.params as { id: string };
