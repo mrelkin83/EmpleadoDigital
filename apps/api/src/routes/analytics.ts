@@ -100,4 +100,57 @@ export function registerAnalyticsRoutes(app: FastifyInstance, ctx: AppContext): 
     const { buildRecommendations } = await import('../pipeline/analyst.js');
     return { recommendations: await buildRecommendations(ctx) };
   });
+
+  /**
+   * Reporte semanal para el cliente (patrón del análisis de competencia, D19/D24):
+   * qué se publicó, cómo rindió, leads captados y qué viene. Determinista y bajo
+   * demanda — sin datos inventados.
+   */
+  app.get('/api/report/weekly', async () => {
+    const weekMs = 7 * 24 * 3600 * 1000;
+    const since = new Date(Date.now() - weekMs);
+
+    const [snapshot, content, leads, approvals] = await Promise.all([
+      collectAnalytics(ctx),
+      ctx.store.listContent(DEFAULT_TENANT_ID),
+      ctx.store.listLeads(DEFAULT_TENANT_ID),
+      ctx.store.listApprovals(DEFAULT_TENANT_ID, 'pending'),
+    ]);
+
+    const publishedThisWeek = content.filter(
+      (p) => p.status === 'published' && p.updatedAt >= since,
+    );
+    const publishedIds = new Set(publishedThisWeek.map((p) => p.id));
+    const posts = snapshot.posts.filter((p) => publishedIds.has(p.pieceId));
+
+    const totals: Record<string, number> = {};
+    for (const post of posts) {
+      for (const [name, value] of Object.entries(post.metrics)) {
+        totals[name] = (totals[name] ?? 0) + value;
+      }
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const upcoming = await ctx.store.listCalendar(DEFAULT_TENANT_ID, today);
+    const { buildRecommendations } = await import('../pipeline/analyst.js');
+
+    return {
+      generatedAt: new Date().toISOString(),
+      since: since.toISOString(),
+      published: posts,
+      totals,
+      newLeads: leads.filter((l) => l.createdAt >= since).length,
+      pendingApprovals: approvals.length,
+      upcomingSlots: upcoming.map((s) => ({
+        date: s.date,
+        time: s.time,
+        format: s.format,
+        pillar: s.pillar,
+        funnel: s.funnel,
+        topic: s.topic,
+        status: s.status,
+      })),
+      recommendations: await buildRecommendations(ctx),
+    };
+  });
 }

@@ -287,7 +287,9 @@ export default function Dashboard() {
     <div className="container">
       <header className="top">
         <h1>
-          Empleado Digital · Marketing <a href="/marca" style={{ fontSize: '0.8rem' }}>Configurar marca</a>
+          Empleado Digital · Marketing{' '}
+          <a href="/marca" style={{ fontSize: '0.8rem' }}>Configurar marca</a>{' '}
+          <a href="/reporte" style={{ fontSize: '0.8rem' }}>Reporte semanal</a>
         </h1>
         <span className="status">
           <span className={`dot ${health?.instagramConnected ? 'ok' : 'off'}`} />

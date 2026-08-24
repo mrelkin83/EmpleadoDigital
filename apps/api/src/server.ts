@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import multipart from '@fastify/multipart';
+import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
@@ -35,6 +36,15 @@ export async function buildServer(ctx: AppContext): Promise<FastifyInstance> {
     } catch (err) {
       done(err as Error, undefined);
     }
+  });
+
+  // Rate limiting global (spec §32): tope generoso para el dashboard local y
+  // exento para lo que consume Meta (webhooks y descarga de material), cuyo
+  // ritmo no controlamos y no debe toparse nunca con un 429 nuestro.
+  await app.register(rateLimit, {
+    max: 300,
+    timeWindow: '1 minute',
+    allowList: (req) => req.url.startsWith('/webhooks') || req.url.startsWith('/media'),
   });
 
   // Subida de material (multipart) y servicio público de /media/ para que
