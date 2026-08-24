@@ -562,6 +562,15 @@ export default function Dashboard() {
                   {(p.media?.kind === 'image' || p.media?.kind === 'carousel') && (
                     <img className="thumb" src={`/media/${p.media.filename}`} alt="" />
                   )}
+                  {p.media?.kind === 'video' && (
+                    <video
+                      className="thumb"
+                      src={`/media/${p.media.filename}`}
+                      muted
+                      playsInline
+                      preload="metadata"
+                    />
+                  )}
                   <div className="piece-main">
                     <span className={`badge ${p.status}`}>{p.status}</span>
                     <button className="piece-title" onClick={() => toggleExpand(p)}>
@@ -581,6 +590,22 @@ export default function Dashboard() {
                         <> · ⏰ {new Date(p.scheduledAt).toLocaleString('es-CO')}</>
                       )}
                     </div>
+
+                    {expanded === p.id && p.media && (
+                      <div className="media-preview">
+                        {p.media.kind === 'video' ? (
+                          <video src={`/media/${p.media.filename}`} controls playsInline />
+                        ) : p.media.kind === 'carousel' ? (
+                          <div className="carousel-strip">
+                            {(p.media.items ?? []).map((it, i) => (
+                              <img key={it.filename} src={`/media/${it.filename}`} alt={`Lámina ${i + 1}`} />
+                            ))}
+                          </div>
+                        ) : (
+                          <img src={`/media/${p.media.filename}`} alt="Material de la pieza" />
+                        )}
+                      </div>
+                    )}
 
                     {expanded === p.id && edit && (
                       <div className="detail">

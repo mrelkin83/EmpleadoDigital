@@ -144,6 +144,18 @@ label.small.secondary {
   width: 56px; height: 56px; border-radius: 12px; object-fit: cover;
   border: 1px solid var(--border-default); flex-shrink: 0;
 }
+.media-preview { margin-top: 8px; }
+.media-preview video, .media-preview > img {
+  max-width: 100%; max-height: 400px; border-radius: 12px;
+  border: 1px solid var(--border-default); display: block;
+}
+.carousel-strip {
+  display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px;
+}
+.carousel-strip img {
+  height: 200px; border-radius: 12px; border: 1px solid var(--border-default);
+  flex-shrink: 0;
+}
 .piece-row { display: flex; gap: 12px; align-items: flex-start; }
 .piece-main { flex: 1; min-width: 0; }
 .piece-title {
