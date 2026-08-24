@@ -128,6 +128,7 @@ export default function Dashboard() {
   const [edit, setEdit] = useState<{ hook: string; body: string; cta: string } | null>(null);
   const [gateFails, setGateFails] = useState<Record<string, string[]>>({});
   const [editSlot, setEditSlot] = useState<{ id: string; topic: string; date: string; time: string } | null>(null);
+  const [slideIdx, setSlideIdx] = useState<Record<string, number>>({});
   const [newSlot, setNewSlot] = useState<{ date: string; time: string; format: string; funnel: string; pillar: string; topic: string } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -596,11 +597,42 @@ export default function Dashboard() {
                         {p.media.kind === 'video' ? (
                           <video src={`/media/${p.media.filename}`} controls playsInline />
                         ) : p.media.kind === 'carousel' ? (
-                          <div className="carousel-strip">
-                            {(p.media.items ?? []).map((it, i) => (
-                              <img key={it.filename} src={`/media/${it.filename}`} alt={`Lámina ${i + 1}`} />
-                            ))}
-                          </div>
+                          (() => {
+                            const items = p.media.items ?? [];
+                            const idx = Math.min(slideIdx[p.id] ?? 0, items.length - 1);
+                            const go = (d: number) =>
+                              setSlideIdx((s) => ({
+                                ...s,
+                                [p.id]: (idx + d + items.length) % items.length,
+                              }));
+                            return (
+                              <div className="carousel-viewer">
+                                <div className="carousel-main">
+                                  <button className="small secondary" aria-label="Lámina anterior" onClick={() => go(-1)}>
+                                    ‹
+                                  </button>
+                                  <img src={`/media/${items[idx]?.filename}`} alt={`Lámina ${idx + 1}`} />
+                                  <button className="small secondary" aria-label="Lámina siguiente" onClick={() => go(1)}>
+                                    ›
+                                  </button>
+                                </div>
+                                <p className="muted" style={{ textAlign: 'center' }}>
+                                  {idx + 1} / {items.length}
+                                </p>
+                                <div className="carousel-strip">
+                                  {items.map((it, i) => (
+                                    <img
+                                      key={it.filename}
+                                      src={`/media/${it.filename}`}
+                                      alt={`Lámina ${i + 1}`}
+                                      className={i === idx ? 'active' : ''}
+                                      onClick={() => setSlideIdx((s) => ({ ...s, [p.id]: i }))}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })()
                         ) : (
                           <img src={`/media/${p.media.filename}`} alt="Material de la pieza" />
                         )}
