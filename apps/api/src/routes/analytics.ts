@@ -101,6 +101,14 @@ export function registerAnalyticsRoutes(app: FastifyInstance, ctx: AppContext): 
     return { recommendations: await buildRecommendations(ctx) };
   });
 
+  /** Ranking de pilares por rendimiento + preferencias (Fase 5): transparencia del aprendizaje. */
+  app.get('/api/insights/pillars', async () => {
+    const brand = await ctx.store.getBrand(DEFAULT_TENANT_ID);
+    if (!brand) return { ranking: [], scores: [] };
+    const { rankPillars } = await import('../pipeline/performance.js');
+    return rankPillars(ctx, brand.contentPillars);
+  });
+
   /**
    * Reporte semanal para el cliente (patrón del análisis de competencia, D19/D24):
    * qué se publicó, cómo rindió, leads captados y qué viene. Determinista y bajo

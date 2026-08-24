@@ -17,6 +17,8 @@ export interface GenerateCaptionInput {
   format: ContentFormat;
   /** Motivos de rechazos recientes del cliente: preferencias aprendidas (D24). */
   rejectionFeedback?: string[];
+  /** Para variantes: hook existente del que la nueva versión debe diferenciarse. */
+  avoidSimilarTo?: string;
 }
 
 export async function generateCaption(
@@ -36,7 +38,14 @@ export async function generateCaption(
     .filter(Boolean)
     .join('\n');
 
-  const prompt = `Crea el contenido para una publicación tipo "${input.format}" del pilar "${input.pillar}" (etapa ${input.funnel}) sobre el tema: ${input.topic}`;
+  const prompt = [
+    `Crea el contenido para una publicación tipo "${input.format}" del pilar "${input.pillar}" (etapa ${input.funnel}) sobre el tema: ${input.topic}`,
+    input.avoidSimilarTo
+      ? `Es una VARIANTE: usa un ángulo y un hook claramente distintos a este: "${input.avoidSimilarTo}"`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   const result = await router.run({
     tenantId: input.tenantId,

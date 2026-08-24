@@ -196,6 +196,31 @@ export default function Dashboard() {
     await refresh();
   }
 
+  async function onVariant(pieceId: string) {
+    setBusyPiece(pieceId);
+    setNotice(null);
+    try {
+      const res = await fetch(`/api/content/${pieceId}/variant`, { method: 'POST' });
+      setNotice(res.ok ? 'Variante creada con otro ángulo.' : 'No se pudo crear la variante.');
+      await refresh();
+    } finally {
+      setBusyPiece(null);
+    }
+  }
+
+  async function onGenerateImage(pieceId: string) {
+    setBusyPiece(pieceId);
+    setNotice(null);
+    try {
+      const res = await fetch(`/api/content/${pieceId}/media/generate`, { method: 'POST' });
+      const data = await res.json();
+      setNotice(res.ok ? 'Imagen de marca generada.' : `No se generó: ${data.message ?? data.error}`);
+      await refresh();
+    } finally {
+      setBusyPiece(null);
+    }
+  }
+
   async function onSchedule(pieceId: string) {
     const value = scheduleAt[pieceId];
     if (!value) {
@@ -389,6 +414,22 @@ export default function Dashboard() {
                 )}
                 {p.status !== 'published' && p.status !== 'scheduled' && (
                   <div className="actions">
+                    <button
+                      className="small secondary"
+                      disabled={busyPiece === p.id}
+                      onClick={() => void onGenerateImage(p.id)}
+                    >
+                      Generar imagen
+                    </button>
+                    {(p.status === 'draft' || p.status === 'rejected') && (
+                      <button
+                        className="small secondary"
+                        disabled={busyPiece === p.id}
+                        onClick={() => void onVariant(p.id)}
+                      >
+                        Variante
+                      </button>
+                    )}
                     <label className="small secondary" style={{ cursor: 'pointer' }}>
                       {busyPiece === p.id ? 'Procesando…' : p.media ? 'Cambiar material' : 'Subir material'}
                       <input
@@ -402,7 +443,7 @@ export default function Dashboard() {
                         }}
                       />
                     </label>
-                    {p.status === 'approved' && p.media?.kind === 'image' && (
+                    {p.status === 'approved' && p.media && (
                       <>
                         <button
                           className="small"

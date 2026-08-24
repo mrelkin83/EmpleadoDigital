@@ -44,10 +44,16 @@ export function registerCalendarRoutes(app: FastifyInstance, ctx: AppContext): v
     const existing = await ctx.store.listCalendar(DEFAULT_TENANT_ID, weekStart);
     const weekDates = new Set(existing.map((s) => s.date));
 
+    // Fase 5: la rotación de pilares arranca por los que mejor rinden según
+    // métricas reales y feedback del cliente (ranking determinista).
+    const { rankPillars } = await import('../pipeline/performance.js');
+    const { ranking } = await rankPillars(ctx, brand.contentPillars);
+
     const slots = await planWeek(ctx.router, {
       tenantId: DEFAULT_TENANT_ID,
       brand,
       weekStart,
+      pillarRanking: ranking,
       ...(parsed.data.defaultTime ? { defaultTime: parsed.data.defaultTime } : {}),
     });
 

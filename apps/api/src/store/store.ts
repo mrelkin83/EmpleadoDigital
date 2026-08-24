@@ -93,6 +93,8 @@ export interface Store {
   addContentFeedback(feedback: ContentFeedback): Promise<void>;
   /** Motivos de rechazo recientes (más nuevos primero), para inyectar en la generación. */
   listRecentRejectionReasons(tenantId: string, limit?: number): Promise<string[]>;
+  /** Aprobados/rechazados por pilar (aprendizaje de preferencias, Fase 5). */
+  feedbackStatsByPillar(tenantId: string): Promise<Array<{ pillar: string; approved: number; rejected: number }>>;
 
   close(): Promise<void>;
 }

@@ -120,7 +120,21 @@ export async function buildRecommendations(ctx: AppContext): Promise<Recommendat
     });
   }
 
-  // 6. Mix de funnel de lo publicado reciente (regla 3/2/1 del spec §20).
+  // 6. Preferencias del cliente: pilar con rechazos sostenidos → revisar enfoque.
+  const feedbackStats = await ctx.store.feedbackStatsByPillar(DEFAULT_TENANT_ID);
+  for (const f of feedbackStats) {
+    if (f.rejected >= 2 && f.rejected > f.approved) {
+      recs.push({
+        id: `pillar-rejected-${f.pillar}`,
+        priority: 'media',
+        title: `El pilar "${f.pillar}" acumula rechazos (${f.rejected})`,
+        detail:
+          'Tus rechazos alimentan la generación, pero si sigue sin convencerte considera redefinir el enfoque de ese pilar en /marca.',
+      });
+    }
+  }
+
+  // 7. Mix de funnel de lo publicado reciente (regla 3/2/1 del spec §20).
   const recent = published.slice(0, 6);
   if (recent.length >= 4 && !recent.some((p) => p.funnel === 'BOFU')) {
     recs.push({

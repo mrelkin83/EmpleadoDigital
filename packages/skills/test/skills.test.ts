@@ -109,7 +109,7 @@ describe('publish_post', () => {
     const result = await publishPost(fakeConnector, new SocialPolicyEngine(), {
       piece: approvedPiece(),
       brand,
-      imageUrl: 'https://example.com/img.jpg',
+      media: { url: 'https://example.com/img.jpg', kind: 'image' as const },
       policyContext: policyCtx('autonomous'),
       humanApproved: false,
     });
@@ -122,7 +122,7 @@ describe('publish_post', () => {
       publishPost(fakeConnector, new SocialPolicyEngine(), {
         piece: approvedPiece(),
         brand,
-        imageUrl: 'https://example.com/img.jpg',
+        media: { url: 'https://example.com/img.jpg', kind: 'image' as const },
         policyContext: policyCtx('copilot'),
         humanApproved: false,
       }),
@@ -133,7 +133,7 @@ describe('publish_post', () => {
     const result = await publishPost(fakeConnector, new SocialPolicyEngine(), {
       piece: approvedPiece(),
       brand,
-      imageUrl: 'https://example.com/img.jpg',
+      media: { url: 'https://example.com/img.jpg', kind: 'image' as const },
       policyContext: policyCtx('copilot'),
       humanApproved: true,
     });
@@ -146,7 +146,7 @@ describe('publish_post', () => {
       publishPost(fakeConnector, new SocialPolicyEngine(), {
         piece: bad,
         brand,
-        imageUrl: 'https://example.com/img.jpg',
+        media: { url: 'https://example.com/img.jpg', kind: 'image' as const },
         policyContext: policyCtx('autonomous'),
         humanApproved: true,
       }),
@@ -159,7 +159,7 @@ describe('publish_post', () => {
       publishPost(fakeConnector, new SocialPolicyEngine(), {
         piece: draft,
         brand,
-        imageUrl: 'https://example.com/img.jpg',
+        media: { url: 'https://example.com/img.jpg', kind: 'image' as const },
         policyContext: policyCtx('autonomous'),
         humanApproved: true,
       }),

@@ -54,6 +54,23 @@ export class InstagramConnector {
   }
 
   /**
+   * Publica un video como Reel (único formato de video del feed vía API).
+   * El procesamiento de video tarda más que el de imagen: timeout amplio.
+   */
+  async publishReel(videoUrl: string, caption: string): Promise<PublishResult> {
+    const containerId = await this.createMediaContainer({
+      media_type: 'REELS',
+      video_url: videoUrl,
+      caption,
+    });
+    await this.waitForContainer(containerId, 5 * 60_000);
+    const mediaId = await this.publishContainer(containerId);
+    const permalink = await this.getPermalink(mediaId);
+    logger.info({ mediaId }, 'Instagram: reel publicado y verificado');
+    return permalink ? { mediaId, permalink } : { mediaId };
+  }
+
+  /**
    * Meta procesa el contenedor de forma asíncrona (descarga la imagen, la valida);
    * publicarlo antes de que esté FINISHED devuelve el error 9007 "Media ID is not
    * available". Se sondea status_code con backoff hasta FINISHED o timeout.

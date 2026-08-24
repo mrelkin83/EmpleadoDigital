@@ -24,6 +24,11 @@ export interface PlanWeekInput {
   weekStart: string;
   /** Hora local de publicación por defecto. */
   defaultTime?: string;
+  /**
+   * Pilares ordenados por rendimiento/preferencias (Fase 5). Si se pasa, la
+   * rotación empieza por los que mejor funcionan; si no, orden de la marca.
+   */
+  pillarRanking?: string[];
 }
 
 const FORMAT_ROTATION: ContentFormat[] = ['reel', 'carousel', 'image', 'carousel', 'reel', 'image'];
@@ -36,8 +41,12 @@ export async function planWeek(router: TaskRouter, input: PlanWeekInput): Promis
   const expected = funnelSequence.length;
 
   // Rotación de pilares: BOFU usa el pilar de conversión si existe; el resto rota.
-  const conversionPillar = brand.contentPillars.find((p) => /conversi/i.test(p));
-  const educationalPillars = brand.contentPillars.filter((p) => p !== conversionPillar);
+  // Con ranking de rendimiento (Fase 5), la rotación arranca por los pilares que
+  // mejor funcionan — sigue rotando (variedad) pero prioriza lo que rinde.
+  const pillarOrder =
+    input.pillarRanking?.filter((p) => brand.contentPillars.includes(p)) ?? brand.contentPillars;
+  const conversionPillar = pillarOrder.find((p) => /conversi/i.test(p));
+  const educationalPillars = pillarOrder.filter((p) => p !== conversionPillar);
 
   const topics = await suggestTopics(router, input, funnelSequence).catch((err) => {
     logger.warn({ err }, 'Sugerencia de temas no disponible; los temas quedan por definir');

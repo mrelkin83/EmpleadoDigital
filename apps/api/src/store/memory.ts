@@ -126,6 +126,18 @@ export class MemoryStore implements Store {
       .map((f) => f.reason!);
   }
 
+  async feedbackStatsByPillar(
+    tenantId: string,
+  ): Promise<Array<{ pillar: string; approved: number; rejected: number }>> {
+    const stats = new Map<string, { approved: number; rejected: number }>();
+    for (const f of this.feedback.filter((x) => x.tenantId === tenantId)) {
+      const s = stats.get(f.pillar) ?? { approved: 0, rejected: 0 };
+      s[f.verdict === 'approved' ? 'approved' : 'rejected']++;
+      stats.set(f.pillar, s);
+    }
+    return [...stats.entries()].map(([pillar, s]) => ({ pillar, ...s }));
+  }
+
   async getAutonomy(tenantId: string): Promise<AutonomyConfig | null> {
     return this.autonomyConfigs.get(tenantId) ?? null;
   }

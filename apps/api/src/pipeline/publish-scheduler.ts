@@ -58,16 +58,19 @@ async function publishDuePiece(ctx: AppContext, pieceId: string): Promise<void> 
   if (!ctx.instagram) return fail('Instagram no está conectado.');
   const brand = await ctx.store.getBrand(DEFAULT_TENANT_ID);
   if (!brand) return fail('falta la Brand Memory.');
-  if (!piece.media || piece.media.kind !== 'image') return fail('la pieza no tiene imagen.');
+  if (!piece.media) return fail('la pieza no tiene material.');
   const redirectUri = getEnv().OAUTH_REDIRECT_URI;
-  if (!redirectUri) return fail('falta OAUTH_REDIRECT_URI para servir la imagen.');
-  const imageUrl = `${new URL(redirectUri).origin}/media/${piece.media.filename}`;
+  if (!redirectUri) return fail('falta OAUTH_REDIRECT_URI para servir el material.');
+  const media = {
+    url: `${new URL(redirectUri).origin}/media/${piece.media.filename}`,
+    kind: piece.media.kind,
+  };
 
   try {
     const result = await publishPost(ctx.instagram, ctx.policyEngine, {
       piece,
       brand,
-      imageUrl,
+      media,
       // La transición approved→scheduled exigió aprobación previa (spec §42).
       humanApproved: piece.approval === 'approved',
       policyContext: {

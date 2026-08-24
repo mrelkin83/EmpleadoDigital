@@ -247,6 +247,21 @@ export class PgStore implements Store {
     return rows.map((r) => r['reason'] as string);
   }
 
+  async feedbackStatsByPillar(
+    tenantId: string,
+  ): Promise<Array<{ pillar: string; approved: number; rejected: number }>> {
+    const rows = await this.sql`
+      SELECT pillar,
+        COUNT(*) FILTER (WHERE verdict = 'approved') AS approved,
+        COUNT(*) FILTER (WHERE verdict = 'rejected') AS rejected
+      FROM content_feedback WHERE tenant_id = ${tenantId} GROUP BY pillar`;
+    return rows.map((r) => ({
+      pillar: r['pillar'] as string,
+      approved: Number(r['approved']),
+      rejected: Number(r['rejected']),
+    }));
+  }
+
   async getAutonomy(tenantId: string): Promise<AutonomyConfig | null> {
     const rows = await this.sql`SELECT config FROM autonomy_config WHERE tenant_id = ${tenantId}`;
     return rows.length ? (rows[0]!['config'] as AutonomyConfig) : null;

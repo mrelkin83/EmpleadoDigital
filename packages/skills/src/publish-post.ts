@@ -16,7 +16,8 @@ import {
 export interface PublishPostInput {
   piece: ContentPiece;
   brand: BrandMemory;
-  imageUrl: string;
+  /** URL pública del material. `kind: 'video'` publica como Reel. */
+  media: { url: string; kind: 'image' | 'video' };
   policyContext: PolicyContext;
   /** true cuando un humano ya aprobó esta pieza explícitamente. */
   humanApproved: boolean;
@@ -63,7 +64,10 @@ export async function publishPost(
 
   // 4. Publicación oficial + verificación.
   const caption = [piece.hook, piece.body, piece.cta].filter(Boolean).join('\n\n');
-  const result = await connector.publishImage(input.imageUrl, caption);
+  const result =
+    input.media.kind === 'video'
+      ? await connector.publishReel(input.media.url, caption)
+      : await connector.publishImage(input.media.url, caption);
 
   logger.info({ pieceId: piece.id, mediaId: result.mediaId }, 'Pieza publicada y verificada');
 

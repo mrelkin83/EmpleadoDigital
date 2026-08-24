@@ -89,3 +89,12 @@ Dos adopciones legítimas de docs/ANALISIS_COMPETENCIA_PATHSOCIAL_PLIXI.md: (1) 
 
 ### D25. Rate limiting global y reporte semanal
 `@fastify/rate-limit` (300 req/min por IP) con exención para `/webhooks` y `/media` — el ritmo de Meta no lo controlamos y un 429 nuestro rompería webhooks o publicación. Reporte semanal en `GET /api/report/weekly` + página `/reporte` imprimible (botón Imprimir/PDF) para compartir con el cliente: publicaciones con métricas, leads nuevos, plan próximo y recomendaciones — determinista y bajo demanda (misma filosofía que D23); el envío automático (email/job del worker) queda para cuando haya despliegue con worker corriendo.
+
+### D26. Fase 3 completa a nivel de código (validación en vivo bloqueada por Meta)
+Pipeline de DMs (`message-pipeline.ts`, espejo del de comentarios: clasificación → lead → escalamiento | keyword → cooldown → Policy Engine) conectado al webhook. Reglas de keywords persistidas (`keyword_rules`, migración 0008) con seed del piloto, `GET/PUT /api/keywords` con recarga del matcher y editor en `/marca`. Hallazgo: el KeywordMatcher arrancaba sin reglas desde el inicio — el auto-responder era inerte. Todo queda listo para el día en que la app se publique y lleguen eventos.
+
+### D27. Fase 4: reels, imagen de marca y variantes
+`publishReel` en el conector (contenedor REELS, timeout de procesamiento 5 min); `publishPost` generalizado a `media {url, kind}` — el scheduler y el publish manual publican video como reel sin cambios extra. Generador de imágenes de marca con sharp (plantilla determinista 1080×1080: titular del hook, barra de acento, pilar y marca; sin coste por imagen) en `POST /api/content/:id/media/generate` + botón "Generar imagen" — desaparece el único paso manual del flujo. Variantes: `POST /api/content/:id/variant` regenera con ángulo distinto (`avoidSimilarTo`) aprendiendo del feedback.
+
+### D28. Fase 5: aprendizaje determinista y planificación optimizada
+`rankPillars` (`performance.ts`): puntuación explicable por pilar = interacciones promedio reales + 2×(aprobados−rechazados); pilares sin datos conservan el orden de marca ("sin datos no hay opinión"). `plan-week` acepta `pillarRanking` y arranca la rotación por los que mejor rinden (sigue rotando: variedad). Transparencia en `GET /api/insights/pillars`. El Analista añade recomendación proactiva cuando un pilar acumula rechazos. Experimentos formales (A/B de hooks/horarios) pospuestos hasta tener volumen: con 1-2 posts serían ruido, no ciencia.

@@ -215,6 +215,73 @@ export function registerContentRoutes(app: FastifyInstance, ctx: AppContext): vo
   });
 
   /**
+   * Genera una VARIANTE de una pieza (Fase 4 — Variaciones): nuevo borrador con
+   * el mismo tema pero ángulo y hook distintos, aprendiendo del feedback.
+   */
+  app.post('/api/content/:id/variant', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const piece = await ctx.store.getContent(DEFAULT_TENANT_ID, id);
+    if (!piece) return reply.status(404).send({ error: 'not_found' });
+    const brand = await ctx.store.getBrand(DEFAULT_TENANT_ID);
+    if (!brand) return reply.status(409).send({ error: 'brand_memory_missing' });
+
+    const rejectionFeedback = await ctx.store.listRecentRejectionReasons(DEFAULT_TENANT_ID);
+    const variant = await generateCaption(ctx.router, {
+      tenantId: DEFAULT_TENANT_ID,
+      brand,
+      pillar: piece.pillar,
+      funnel: piece.funnel,
+      topic: piece.topic,
+      format: piece.format,
+      ...(piece.hook ? { avoidSimilarTo: piece.hook } : {}),
+      ...(rejectionFeedback.length ? { rejectionFeedback } : {}),
+    });
+    await ctx.store.saveContent(variant);
+    const gate = runQualityGate(variant, brand);
+    await ctx.logActivity({
+      actor: 'copywriter',
+      kind: 'action',
+      summary: `Creé una variante de "${piece.hook || piece.topic}" con otro ángulo.`,
+    });
+    return reply.status(201).send({ piece: variant, qualityGate: gate });
+  });
+
+  /**
+   * Genera la imagen de marca de una pieza (plantilla determinista, sin coste).
+   * Reemplaza el material anterior si existía.
+   */
+  app.post('/api/content/:id/media/generate', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const piece = await ctx.store.getContent(DEFAULT_TENANT_ID, id);
+    if (!piece) return reply.status(404).send({ error: 'not_found' });
+    if (piece.status === 'published') {
+      return reply.status(409).send({ error: 'media_locked', message: 'La pieza ya fue publicada.' });
+    }
+    const brand = await ctx.store.getBrand(DEFAULT_TENANT_ID);
+    if (!brand) return reply.status(409).send({ error: 'brand_memory_missing' });
+
+    const { generateBrandImage } = await import('../pipeline/image-generator.js');
+    const generated = await generateBrandImage(brand, piece);
+
+    const previous = piece.media?.filename;
+    const updated = {
+      ...piece,
+      media: { filename: generated.filename, mime: generated.mime, kind: 'image' as const },
+      updatedAt: new Date(),
+    };
+    await ctx.store.saveContent(updated);
+    if (previous && previous !== generated.filename) {
+      await unlink(path.join(UPLOADS_DIR, previous)).catch(() => {});
+    }
+
+    const base = publicBaseUrl();
+    return reply.status(201).send({
+      piece: updated,
+      mediaUrl: base ? `${base}/media/${generated.filename}` : `/media/${generated.filename}`,
+    });
+  });
+
+  /**
    * Programa una pieza aprobada para publicación automática (spec §42: approved→scheduled).
    * Requiere material subido: a la hora programada no habrá humano para aportar la imagen.
    */
@@ -232,10 +299,10 @@ export function registerContentRoutes(app: FastifyInstance, ctx: AppContext): vo
     if (!canTransition(piece.status, 'scheduled')) {
       return reply.status(409).send({ error: 'invalid_transition', from: piece.status });
     }
-    if (!piece.media || piece.media.kind !== 'image') {
+    if (!piece.media) {
       return reply.status(400).send({
         error: 'media_missing',
-        message: 'Sube la imagen de la pieza antes de programarla.',
+        message: 'Sube el material (imagen o video) de la pieza antes de programarla.',
       });
     }
     if (parsed.data.scheduledAt.getTime() <= Date.now()) {
@@ -295,19 +362,16 @@ export function registerContentRoutes(app: FastifyInstance, ctx: AppContext): vo
       });
     }
 
-    // Imagen: la URL explícita tiene prioridad; si no, el material subido a la pieza.
-    let imageUrl = parsed.data.imageUrl;
-    if (!imageUrl) {
+    // Material: la URL explícita tiene prioridad; si no, el material subido a la pieza.
+    // El video se publica como Reel.
+    let media: { url: string; kind: 'image' | 'video' } | undefined = parsed.data.imageUrl
+      ? { url: parsed.data.imageUrl, kind: 'image' }
+      : undefined;
+    if (!media) {
       if (!piece.media) {
         return reply.status(400).send({
-          error: 'image_missing',
+          error: 'media_missing',
           message: 'Sube el material de la pieza (POST /api/content/:id/media) o pasa imageUrl.',
-        });
-      }
-      if (piece.media.kind !== 'image') {
-        return reply.status(422).send({
-          error: 'video_publish_not_supported',
-          message: 'La publicación de video (reels) aún no está implementada; sube una imagen.',
         });
       }
       const base = publicBaseUrl();
@@ -317,14 +381,14 @@ export function registerContentRoutes(app: FastifyInstance, ctx: AppContext): vo
           message: 'Configura OAUTH_REDIRECT_URI (túnel/dominio) para servir el material a Meta.',
         });
       }
-      imageUrl = `${base}/media/${piece.media.filename}`;
+      media = { url: `${base}/media/${piece.media.filename}`, kind: piece.media.kind };
     }
 
     try {
       const result = await publishPost(ctx.instagram, ctx.policyEngine, {
         piece,
         brand,
-        imageUrl,
+        media,
         humanApproved: parsed.data.humanApproved,
         policyContext: {
           tenantId: DEFAULT_TENANT_ID,
