@@ -30,11 +30,15 @@ interface Piece {
   funnel: string;
   topic: string;
   hook: string;
+  body: string;
+  cta: string;
   status: string;
   approval: string;
   scheduledAt?: string;
   media?: { filename: string; mime: string; kind: 'image' | 'video' };
 }
+
+const EDITABLE_STATUSES = new Set(['idea', 'draft', 'in_review', 'rejected']);
 
 interface Health {
   status: string;
@@ -115,6 +119,9 @@ export default function Dashboard() {
   const [generating, setGenerating] = useState(false);
   const [busyPiece, setBusyPiece] = useState<string | null>(null);
   const [scheduleAt, setScheduleAt] = useState<Record<string, string>>({});
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [edit, setEdit] = useState<{ hook: string; body: string; cta: string } | null>(null);
+  const [gateFails, setGateFails] = useState<Record<string, string[]>>({});
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -194,6 +201,65 @@ export default function Dashboard() {
       body: JSON.stringify(next),
     });
     await refresh();
+  }
+
+  function toggleExpand(p: Piece) {
+    if (expanded === p.id) {
+      setExpanded(null);
+      setEdit(null);
+    } else {
+      setExpanded(p.id);
+      setEdit({ hook: p.hook, body: p.body, cta: p.cta });
+    }
+  }
+
+  async function onSaveEdit(pieceId: string) {
+    if (!edit) return;
+    setBusyPiece(pieceId);
+    try {
+      const res = await fetch(`/api/content/${pieceId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(edit),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        const failed = (data.qualityGate?.results ?? [])
+          .filter((r: { passed: boolean }) => !r.passed)
+          .map((r: { check: string; detail?: string }) => r.detail ?? r.check);
+        setGateFails((g) => ({ ...g, [pieceId]: failed }));
+        setNotice(failed.length ? 'Guardado; revisa los puntos del control de calidad.' : 'Guardado ✓');
+      } else {
+        setNotice(`No se guardó: ${data.message ?? data.error}`);
+      }
+      await refresh();
+    } finally {
+      setBusyPiece(null);
+    }
+  }
+
+  async function onSubmitReview(pieceId: string) {
+    setBusyPiece(pieceId);
+    setNotice(null);
+    try {
+      const res = await fetch(`/api/content/${pieceId}/submit`, { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        setGateFails((g) => ({ ...g, [pieceId]: [] }));
+        setNotice('Enviada a revisión: apruébala en "Necesita tu aprobación".');
+      } else if (data.error === 'quality_gate_failed') {
+        const failed = (data.qualityGate?.results ?? [])
+          .filter((r: { passed: boolean }) => !r.passed)
+          .map((r: { check: string; detail?: string }) => r.detail ?? r.check);
+        setGateFails((g) => ({ ...g, [pieceId]: failed }));
+        setNotice('El control de calidad detuvo la pieza; corrige lo señalado.');
+      } else {
+        setNotice(`No se pudo enviar: ${data.message ?? data.error}`);
+      }
+      await refresh();
+    } finally {
+      setBusyPiece(null);
+    }
   }
 
   async function onVariant(pieceId: string) {
@@ -387,89 +453,163 @@ export default function Dashboard() {
 
         <section className="card">
           <h2>Contenido</h2>
-          {notice && <p className="muted" style={{ marginBottom: 8 }}>{notice}</p>}
+          {notice && <p className="notice">{notice}</p>}
           {content.length === 0 && <p className="empty">Aún no hay piezas. Genera la primera.</p>}
           <ul className="plain">
-            {content.slice(0, 8).map((p) => (
+            {content.slice(0, 10).map((p) => (
               <li key={p.id}>
-                <span className={`badge ${p.status}`}>{p.status}</span>
-                <strong>{p.hook || p.topic}</strong>
-                <div className="muted">
-                  {p.format} · {p.pillar} · {p.funnel}
-                  {p.media && <> · 📎 {p.media.kind === 'image' ? 'imagen' : 'video'} adjunto</>}
-                  {p.status === 'scheduled' && p.scheduledAt && (
-                    <> · ⏰ programada: {new Date(p.scheduledAt).toLocaleString('es-CO')}</>
+                <div className="piece-row">
+                  {p.media?.kind === 'image' && (
+                    <img className="thumb" src={`/media/${p.media.filename}`} alt="" />
                   )}
-                </div>
-                {p.status === 'scheduled' && (
-                  <div className="actions">
-                    <button
-                      className="small secondary"
-                      disabled={busyPiece === p.id}
-                      onClick={() => void onUnschedule(p.id)}
-                    >
-                      Cancelar programación
+                  <div className="piece-main">
+                    <span className={`badge ${p.status}`}>{p.status}</span>
+                    <button className="piece-title" onClick={() => toggleExpand(p)}>
+                      {p.hook || p.topic}
                     </button>
-                  </div>
-                )}
-                {p.status !== 'published' && p.status !== 'scheduled' && (
-                  <div className="actions">
-                    <button
-                      className="small secondary"
-                      disabled={busyPiece === p.id}
-                      onClick={() => void onGenerateImage(p.id)}
-                    >
-                      Generar imagen
-                    </button>
-                    {(p.status === 'draft' || p.status === 'rejected') && (
-                      <button
-                        className="small secondary"
-                        disabled={busyPiece === p.id}
-                        onClick={() => void onVariant(p.id)}
-                      >
-                        Variante
-                      </button>
+                    <div className="muted">
+                      {p.format} · {p.pillar} · {p.funnel}
+                      {p.media?.kind === 'video' && <> · 🎬 video adjunto (se publica como reel)</>}
+                      {p.status === 'scheduled' && p.scheduledAt && (
+                        <> · ⏰ {new Date(p.scheduledAt).toLocaleString('es-CO')}</>
+                      )}
+                    </div>
+
+                    {expanded === p.id && edit && (
+                      <div className="detail">
+                        {EDITABLE_STATUSES.has(p.status) ? (
+                          <>
+                            <label className="field">
+                              Hook
+                              <textarea
+                                rows={2}
+                                value={edit.hook}
+                                onChange={(e) => setEdit({ ...edit, hook: e.target.value })}
+                              />
+                            </label>
+                            <label className="field">
+                              Cuerpo
+                              <textarea
+                                rows={8}
+                                value={edit.body}
+                                onChange={(e) => setEdit({ ...edit, body: e.target.value })}
+                              />
+                            </label>
+                            <label className="field">
+                              Llamado a la acción
+                              <textarea
+                                rows={2}
+                                value={edit.cta}
+                                onChange={(e) => setEdit({ ...edit, cta: e.target.value })}
+                              />
+                            </label>
+                            <div className="actions">
+                              <button
+                                className="small"
+                                disabled={busyPiece === p.id}
+                                onClick={() => void onSaveEdit(p.id)}
+                              >
+                                Guardar cambios
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <p className="muted" style={{ whiteSpace: 'pre-wrap' }}>
+                            {[p.hook, p.body, p.cta].filter(Boolean).join('\n\n')}
+                          </p>
+                        )}
+                      </div>
                     )}
-                    <label className="small secondary" style={{ cursor: 'pointer' }}>
-                      {busyPiece === p.id ? 'Procesando…' : p.media ? 'Cambiar material' : 'Subir material'}
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,video/mp4"
-                        style={{ display: 'none' }}
-                        disabled={busyPiece === p.id}
-                        onChange={(e) => {
-                          void onUploadMedia(p.id, e.target.files?.[0]);
-                          e.target.value = '';
-                        }}
-                      />
-                    </label>
-                    {p.status === 'approved' && p.media && (
-                      <>
+
+                    {(gateFails[p.id]?.length ?? 0) > 0 && (
+                      <div className="gate-fail" style={{ marginTop: 8 }}>
+                        Control de calidad: {gateFails[p.id]!.join(' · ')}
+                      </div>
+                    )}
+
+                    {p.status === 'scheduled' && (
+                      <div className="actions">
                         <button
-                          className="small"
+                          className="small danger"
                           disabled={busyPiece === p.id}
-                          onClick={() => void onPublish(p.id)}
+                          onClick={() => void onUnschedule(p.id)}
                         >
-                          Publicar ya
+                          Cancelar programación
                         </button>
-                        <input
-                          type="datetime-local"
-                          value={scheduleAt[p.id] ?? ''}
-                          onChange={(e) =>
-                            setScheduleAt((s) => ({ ...s, [p.id]: e.target.value }))
-                          }
-                        />
+                      </div>
+                    )}
+                    {p.status !== 'published' && p.status !== 'scheduled' && (
+                      <div className="actions">
+                        {(p.status === 'draft' || p.status === 'rejected') && (
+                          <button
+                            className="small"
+                            disabled={busyPiece === p.id}
+                            onClick={() => void onSubmitReview(p.id)}
+                          >
+                            Enviar a revisión
+                          </button>
+                        )}
                         <button
-                          className="small"
-                          disabled={busyPiece === p.id || !scheduleAt[p.id]}
-                          onClick={() => void onSchedule(p.id)}
+                          className="small secondary"
+                          disabled={busyPiece === p.id}
+                          onClick={() => void onGenerateImage(p.id)}
                         >
-                          Programar
+                          {p.media ? 'Regenerar imagen' : 'Generar imagen'}
                         </button>
-                      </>
+                        {(p.status === 'draft' || p.status === 'rejected') && (
+                          <button
+                            className="small secondary"
+                            disabled={busyPiece === p.id}
+                            onClick={() => void onVariant(p.id)}
+                          >
+                            Variante
+                          </button>
+                        )}
+                        <label className="small secondary" style={{ cursor: 'pointer' }}>
+                          {busyPiece === p.id ? 'Procesando…' : p.media ? 'Cambiar material' : 'Subir material'}
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,video/mp4"
+                            style={{ display: 'none' }}
+                            disabled={busyPiece === p.id}
+                            onChange={(e) => {
+                              void onUploadMedia(p.id, e.target.files?.[0]);
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                        {p.status === 'approved' && p.media && (
+                          <>
+                            <button
+                              className="small"
+                              disabled={busyPiece === p.id}
+                              onClick={() => void onPublish(p.id)}
+                            >
+                              Publicar ya
+                            </button>
+                            <input
+                              type="datetime-local"
+                              value={scheduleAt[p.id] ?? ''}
+                              onChange={(e) =>
+                                setScheduleAt((s) => ({ ...s, [p.id]: e.target.value }))
+                              }
+                            />
+                            <button
+                              className="small"
+                              disabled={busyPiece === p.id || !scheduleAt[p.id]}
+                              onClick={() => void onSchedule(p.id)}
+                            >
+                              Programar
+                            </button>
+                          </>
+                        )}
+                        {p.status === 'in_review' && (
+                          <span className="muted">En revisión: apruébala arriba en &quot;Necesita tu aprobación&quot;.</span>
+                        )}
+                      </div>
                     )}
                   </div>
-                )}
+                </div>
               </li>
             ))}
           </ul>
