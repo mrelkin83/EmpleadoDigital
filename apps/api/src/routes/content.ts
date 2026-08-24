@@ -300,6 +300,47 @@ export function registerContentRoutes(app: FastifyInstance, ctx: AppContext): vo
   });
 
   /**
+   * Genera un video con Veo para la pieza (reels). Operación larga (1-5 min) y
+   * de pago en Google: el dashboard avisa antes de invocarla.
+   */
+  app.post('/api/content/:id/media/generate-video', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const piece = await ctx.store.getContent(DEFAULT_TENANT_ID, id);
+    if (!piece) return reply.status(404).send({ error: 'not_found' });
+    if (piece.status === 'published') {
+      return reply.status(409).send({ error: 'media_locked', message: 'La pieza ya fue publicada.' });
+    }
+    const brand = await ctx.store.getBrand(DEFAULT_TENANT_ID);
+    if (!brand) return reply.status(409).send({ error: 'brand_memory_missing' });
+    const geminiKey = getEnv().GEMINI_API_KEY;
+    if (!geminiKey) {
+      return reply.status(409).send({ error: 'gemini_key_missing', message: 'Configura GEMINI_API_KEY.' });
+    }
+
+    const { generateAiVideo } = await import('../pipeline/image-generator.js');
+    try {
+      const generated = await generateAiVideo(geminiKey, brand, piece);
+      const previous = piece.media?.filename;
+      const updated = {
+        ...piece,
+        media: { filename: generated.filename, mime: generated.mime, kind: generated.kind },
+        updatedAt: new Date(),
+      };
+      await ctx.store.saveContent(updated);
+      if (previous && previous !== generated.filename) {
+        await unlink(path.join(UPLOADS_DIR, previous)).catch(() => {});
+      }
+      return reply.status(201).send({ piece: updated });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'error desconocido';
+      return reply.status(502).send({
+        error: 'video_generation_failed',
+        message: `${message}. Nota: Veo requiere plan de pago en Google AI Studio.`,
+      });
+    }
+  });
+
+  /**
    * Programa una pieza aprobada para publicación automática (spec §42: approved→scheduled).
    * Requiere material subido: a la hora programada no habrá humano para aportar la imagen.
    */

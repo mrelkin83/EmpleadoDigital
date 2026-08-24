@@ -127,6 +127,73 @@ export async function generateGeminiImage(
   };
 }
 
+interface VeoOperation {
+  name?: string;
+  done?: boolean;
+  error?: { message?: string };
+  response?: {
+    generateVideoResponse?: {
+      generatedSamples?: Array<{ video?: { uri?: string } }>;
+    };
+  };
+}
+
+/**
+ * Genera un video corto con Veo (operación de larga duración: se sondea hasta
+ * `done`). Requiere plan de pago en AI Studio — el tier gratuito devuelve un
+ * error claro que el llamador muestra al usuario.
+ */
+export async function generateGeminiVideo(
+  apiKey: string,
+  prompt: string,
+  options: { model?: string; aspectRatio?: '9:16' | '16:9'; timeoutMs?: number } = {},
+): Promise<{ bytes: Buffer; mimeType: string }> {
+  const model = options.model ?? 'veo-3.0-fast-generate-001';
+  const headers = { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey };
+
+  const startRes = await fetch(`${API_BASE}/models/${model}:predictLongRunning`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      instances: [{ prompt }],
+      parameters: { aspectRatio: options.aspectRatio ?? '9:16' },
+    }),
+  });
+  const started = (await startRes.json().catch(() => ({}))) as VeoOperation & {
+    error?: { message?: string };
+  };
+  if (!startRes.ok || !started.name) {
+    throw new ProviderError(`Veo no aceptó la petición (${startRes.status})`, {
+      status: startRes.status,
+      message: started.error?.message?.slice(0, 300),
+    });
+  }
+
+  const deadline = Date.now() + (options.timeoutMs ?? 6 * 60_000);
+  let operation: VeoOperation = started;
+  while (!operation.done) {
+    if (Date.now() > deadline) {
+      throw new ProviderError('Veo: el video no estuvo listo a tiempo', { operation: started.name });
+    }
+    await new Promise((r) => setTimeout(r, 10_000));
+    const pollRes = await fetch(`${API_BASE}/${started.name}`, { headers });
+    operation = (await pollRes.json().catch(() => ({}))) as VeoOperation;
+  }
+  if (operation.error) {
+    throw new ProviderError('Veo devolvió error', { message: operation.error.message?.slice(0, 300) });
+  }
+
+  const uri = operation.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri;
+  if (!uri) {
+    throw new ProviderError('Veo terminó sin video en la respuesta', { operation: started.name });
+  }
+  const videoRes = await fetch(uri, { headers: { 'x-goog-api-key': apiKey } });
+  if (!videoRes.ok) {
+    throw new ProviderError(`No se pudo descargar el video de Veo (${videoRes.status})`, {});
+  }
+  return { bytes: Buffer.from(await videoRes.arrayBuffer()), mimeType: 'video/mp4' };
+}
+
 async function geminiRequest(
   apiKey: string,
   model: string,

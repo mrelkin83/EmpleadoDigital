@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import sharp from 'sharp';
 import type { BrandMemory } from '@empleado/brand';
-import { generateGeminiImage } from '@empleado/ai-providers';
+import { generateGeminiImage, generateGeminiVideo } from '@empleado/ai-providers';
 import { logger } from '@empleado/shared';
 import { UPLOADS_DIR } from '../server.js';
 
@@ -82,6 +82,32 @@ export async function generateBrandImage(
   const filename = `${randomUUID()}.jpg`;
   await sharp(Buffer.from(svg)).jpeg({ quality: 92 }).toFile(path.join(UPLOADS_DIR, filename));
   return { filename, mime: 'image/jpeg', source: 'template' };
+}
+
+/**
+ * Video corto vertical con Veo para reels. Requiere plan de pago de AI Studio;
+ * en tier gratuito el error se propaga con mensaje claro. Sin texto en pantalla
+ * (mismas razones que la imagen); el copy vive en el caption.
+ */
+export async function generateAiVideo(
+  apiKey: string,
+  brand: BrandMemory,
+  piece: { hook: string; topic: string; pillar: string },
+): Promise<{ filename: string; mime: 'video/mp4'; kind: 'video' }> {
+  const prompt = [
+    `Video corto vertical (9:16) de estilo editorial profesional para un reel de Instagram que ilustre: "${piece.topic}".`,
+    `Contexto del negocio: ${brand.niche} en ${brand.market}.`,
+    'Estilo: cinematográfico realista, iluminación natural, ritmo sereno, paleta sobria con azul marino y acentos dorados.',
+    'Ambiente de comercio exterior: puertos, contenedores, documentos aduaneros, oficinas profesionales.',
+    'SIN texto en pantalla, SIN rótulos, SIN logotipos.',
+  ].join(' ');
+
+  const { bytes } = await generateGeminiVideo(apiKey, prompt, { aspectRatio: '9:16' });
+  const filename = `${randomUUID()}.mp4`;
+  const { writeFile } = await import('node:fs/promises');
+  await writeFile(path.join(UPLOADS_DIR, filename), bytes);
+  logger.info({ filename, sizeKb: Math.round(bytes.length / 1024) }, 'Video generado con Veo');
+  return { filename, mime: 'video/mp4', kind: 'video' };
 }
 
 /** Corta el texto en líneas de máximo `maxChars`, hasta `maxLines` (elipsis al final). */

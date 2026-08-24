@@ -122,6 +122,7 @@ export default function Dashboard() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [edit, setEdit] = useState<{ hook: string; body: string; cta: string } | null>(null);
   const [gateFails, setGateFails] = useState<Record<string, string[]>>({});
+  const [editSlot, setEditSlot] = useState<{ id: string; topic: string } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -260,6 +261,37 @@ export default function Dashboard() {
     } finally {
       setBusyPiece(null);
     }
+  }
+
+  async function onGenerateVideo(pieceId: string) {
+    if (
+      !confirm(
+        'Generar video con IA (Veo) tarda 1-5 minutos y requiere plan de pago en Google AI Studio (se cobra por segundo de video). ¿Continuar?',
+      )
+    )
+      return;
+    setBusyPiece(pieceId);
+    setNotice('Generando video con Veo… esto puede tardar varios minutos.');
+    try {
+      const res = await fetch(`/api/content/${pieceId}/media/generate-video`, { method: 'POST' });
+      const data = await res.json();
+      setNotice(res.ok ? 'Video generado y adjuntado (se publicará como reel).' : `No se generó: ${data.message ?? data.error}`);
+      await refresh();
+    } catch {
+      setNotice('Error generando el video.');
+    } finally {
+      setBusyPiece(null);
+    }
+  }
+
+  async function onSaveSlotTopic(slotId: string, topic: string) {
+    await fetch(`/api/calendar/${slotId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic }),
+    });
+    setEditSlot(null);
+    await refresh();
   }
 
   async function onVariant(pieceId: string) {
@@ -469,7 +501,11 @@ export default function Dashboard() {
                   <div className="piece-main">
                     <span className={`badge ${p.status}`}>{p.status}</span>
                     <button className="piece-title" onClick={() => toggleExpand(p)}>
-                      {p.hook || p.topic}
+                      {expanded === p.id ? '▾' : '▸'} {p.hook || p.topic}
+                      <span className="muted" style={{ fontWeight: 400 }}>
+                        {' '}
+                        · {expanded === p.id ? 'cerrar' : 'ver / editar'}
+                      </span>
                     </button>
                     <div className="muted">
                       {p.format} · {p.pillar} · {p.funnel}
@@ -567,6 +603,15 @@ export default function Dashboard() {
                         >
                           Plantilla
                         </button>
+                        {p.format === 'reel' && (
+                          <button
+                            className="small secondary"
+                            disabled={busyPiece === p.id}
+                            onClick={() => void onGenerateVideo(p.id)}
+                          >
+                            Video IA (Veo)
+                          </button>
+                        )}
                         {(p.status === 'draft' || p.status === 'rejected') && (
                           <button
                             className="small secondary"
@@ -635,10 +680,41 @@ export default function Dashboard() {
             {calendar.slice(0, 7).map((s) => (
               <li key={s.id}>
                 <span className={`badge ${s.status === 'planned' ? 'draft' : s.status}`}>{s.funnel}</span>
-                <strong>{s.topic}</strong>
-                <div className="muted">
-                  {s.date} {s.time} · {s.format} · {s.pillar}
-                </div>
+                {editSlot?.id === s.id ? (
+                  <div className="detail">
+                    <textarea
+                      rows={4}
+                      maxLength={200}
+                      value={editSlot.topic}
+                      onChange={(e) => setEditSlot({ id: s.id, topic: e.target.value })}
+                    />
+                    <div className="actions">
+                      <button
+                        className="small"
+                        onClick={() => void onSaveSlotTopic(s.id, editSlot.topic)}
+                      >
+                        Guardar tema
+                      </button>
+                      <button className="small secondary" onClick={() => setEditSlot(null)}>
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <strong style={{ overflowWrap: 'anywhere' }}>{s.topic}</strong>
+                    <div className="muted">
+                      {s.date} {s.time} · {s.format} · {s.pillar} ·{' '}
+                      <button
+                        className="piece-title"
+                        style={{ fontSize: 12 }}
+                        onClick={() => setEditSlot({ id: s.id, topic: s.topic })}
+                      >
+                        editar tema
+                      </button>
+                    </div>
+                  </>
+                )}
               </li>
             ))}
           </ul>
