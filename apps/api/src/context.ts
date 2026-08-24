@@ -149,6 +149,7 @@ async function restoreInstagramConnection(ctx: AppContext): Promise<void> {
       'instagram_business_content_publish',
       'instagram_business_manage_comments',
       'instagram_business_manage_messages',
+      'instagram_business_manage_insights',
     ];
     logger.info('Instagram configurado por variables de entorno (modo desarrollo)');
     subscribeAccountToWebhooks(ctx.instagram);

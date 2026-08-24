@@ -24,6 +24,12 @@ describe('API', () => {
     expect(res.json()).toMatchObject({ status: 'ok', instagramConnected: false });
   });
 
+  it('GET /api/analytics sin Instagram conectado responde vacío y sin inventar datos', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/analytics' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ connected: false, posts: [], totals: {} });
+  });
+
   it('GET /api/brand devuelve la Brand Memory del piloto (seed)', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/brand' });
     expect(res.statusCode).toBe(200);

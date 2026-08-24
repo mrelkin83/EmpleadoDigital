@@ -40,6 +40,31 @@ interface Health {
   instagramConnected: boolean;
 }
 
+interface PostAnalytics {
+  pieceId: string;
+  hook: string;
+  topic: string;
+  format: string;
+  pillar: string;
+  permalink?: string;
+  metrics: Record<string, number>;
+}
+
+interface Analytics {
+  connected: boolean;
+  posts: PostAnalytics[];
+  totals: Record<string, number>;
+}
+
+const METRIC_LABELS: Record<string, string> = {
+  reach: 'Alcance',
+  likes: 'Me gusta',
+  comments: 'Comentarios',
+  saved: 'Guardados',
+  shares: 'Compartidos',
+  total_interactions: 'Interacciones',
+};
+
 interface Slot {
   id: string;
   date: string;
@@ -57,6 +82,7 @@ export default function Dashboard() {
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [content, setContent] = useState<Piece[]>([]);
   const [calendar, setCalendar] = useState<Slot[]>([]);
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [planning, setPlanning] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [busyPiece, setBusyPiece] = useState<string | null>(null);
@@ -66,18 +92,20 @@ export default function Dashboard() {
   const refresh = useCallback(async () => {
     try {
       const today = new Date().toISOString().slice(0, 10);
-      const [h, a, ap, c, cal] = await Promise.all([
+      const [h, a, ap, c, cal, an] = await Promise.all([
         fetch('/health').then((r) => r.json()),
         fetch('/api/activity').then((r) => r.json()),
         fetch('/api/approvals?status=pending').then((r) => r.json()),
         fetch('/api/content').then((r) => r.json()),
         fetch(`/api/calendar?from=${today}`).then((r) => r.json()),
+        fetch('/api/analytics').then((r) => r.json()),
       ]);
       setHealth(h);
       setActivity(a);
       setApprovals(ap);
       setContent(c);
       setCalendar(cal.slots ?? []);
+      setAnalytics(an);
       setError(null);
     } catch {
       setError('No se pudo conectar con la API (npm run dev:api)');
@@ -185,10 +213,12 @@ export default function Dashboard() {
               ? 'Instagram conectado'
               : 'Instagram sin conectar'
             : 'Conectando...'}
-          {health && !health.instagramConnected && (
+          {health && (
             <>
               {' · '}
-              <a href="/auth/instagram/login">Conectar Instagram</a>
+              <a href="/auth/instagram/login">
+                {health.instagramConnected ? 'Reconectar' : 'Conectar Instagram'}
+              </a>
             </>
           )}
         </span>
@@ -310,6 +340,44 @@ export default function Dashboard() {
               {planning ? 'Planificando…' : 'Planificar próxima semana'}
             </button>
           </div>
+        </section>
+
+        <section className="card">
+          <h2>Rendimiento</h2>
+          {!analytics?.connected && <p className="empty">Conecta Instagram para ver métricas.</p>}
+          {analytics?.connected && analytics.posts.length === 0 && (
+            <p className="empty">Aún no hay publicaciones con métricas.</p>
+          )}
+          <ul className="plain">
+            {analytics?.posts.map((p) => (
+              <li key={p.pieceId}>
+                <strong>
+                  {p.permalink ? (
+                    <a href={p.permalink} target="_blank" rel="noreferrer">
+                      {p.hook || p.topic}
+                    </a>
+                  ) : (
+                    p.hook || p.topic
+                  )}
+                </strong>
+                <div className="muted">
+                  {Object.entries(p.metrics).length === 0
+                    ? 'Métricas aún no disponibles'
+                    : Object.entries(p.metrics)
+                        .map(([k, v]) => `${METRIC_LABELS[k] ?? k}: ${v}`)
+                        .join(' · ')}
+                </div>
+              </li>
+            ))}
+          </ul>
+          {analytics && Object.keys(analytics.totals).length > 0 && (
+            <p className="muted">
+              <strong>Total:</strong>{' '}
+              {Object.entries(analytics.totals)
+                .map(([k, v]) => `${METRIC_LABELS[k] ?? k}: ${v}`)
+                .join(' · ')}
+            </p>
+          )}
         </section>
 
         <section className="card">

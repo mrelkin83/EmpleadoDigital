@@ -7,6 +7,7 @@ import type { AppContext } from './context.js';
 
 /** Carpeta donde se guarda el material subido (imágenes/videos); servida en /media/. */
 export const UPLOADS_DIR = path.resolve(process.cwd(), 'uploads');
+import { registerAnalyticsRoutes } from './routes/analytics.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerCalendarRoutes } from './routes/calendar.js';
 import { registerContentRoutes } from './routes/content.js';
@@ -43,6 +44,7 @@ export async function buildServer(ctx: AppContext): Promise<FastifyInstance> {
   await app.register(fastifyStatic, { root: UPLOADS_DIR, prefix: '/media/' });
 
   registerMiscRoutes(app, ctx);
+  registerAnalyticsRoutes(app, ctx);
   registerAuthRoutes(app, ctx);
   registerContentRoutes(app, ctx);
   registerCalendarRoutes(app, ctx);
