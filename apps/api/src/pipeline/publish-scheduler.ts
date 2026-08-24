@@ -61,9 +61,13 @@ async function publishDuePiece(ctx: AppContext, pieceId: string): Promise<void> 
   if (!piece.media) return fail('la pieza no tiene material.');
   const redirectUri = getEnv().OAUTH_REDIRECT_URI;
   if (!redirectUri) return fail('falta OAUTH_REDIRECT_URI para servir el material.');
+  const base = new URL(redirectUri).origin;
   const media = {
-    url: `${new URL(redirectUri).origin}/media/${piece.media.filename}`,
+    url: `${base}/media/${piece.media.filename}`,
     kind: piece.media.kind,
+    ...(piece.media.kind === 'carousel' && piece.media.items
+      ? { urls: piece.media.items.map((i) => `${base}/media/${i.filename}`) }
+      : {}),
   };
 
   try {

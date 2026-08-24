@@ -16,8 +16,11 @@ import {
 export interface PublishPostInput {
   piece: ContentPiece;
   brand: BrandMemory;
-  /** URL pública del material. `kind: 'video'` publica como Reel. */
-  media: { url: string; kind: 'image' | 'video' };
+  /**
+   * Material público. `video` publica como Reel; `carousel` requiere `urls`
+   * con todas las láminas en orden.
+   */
+  media: { url: string; kind: 'image' | 'video' | 'carousel'; urls?: string[] };
   policyContext: PolicyContext;
   /** true cuando un humano ya aprobó esta pieza explícitamente. */
   humanApproved: boolean;
@@ -67,7 +70,9 @@ export async function publishPost(
   const result =
     input.media.kind === 'video'
       ? await connector.publishReel(input.media.url, caption)
-      : await connector.publishImage(input.media.url, caption);
+      : input.media.kind === 'carousel'
+        ? await connector.publishCarousel(input.media.urls ?? [input.media.url], caption)
+        : await connector.publishImage(input.media.url, caption);
 
   logger.info({ pieceId: piece.id, mediaId: result.mediaId }, 'Pieza publicada y verificada');
 

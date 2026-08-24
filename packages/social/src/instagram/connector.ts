@@ -54,6 +54,34 @@ export class InstagramConnector {
   }
 
   /**
+   * Publica un carrusel (2-10 imágenes): un contenedor hijo por lámina, luego
+   * el contenedor CAROUSEL con los hijos, y publicación tras procesarse todo.
+   */
+  async publishCarousel(imageUrls: string[], caption: string): Promise<PublishResult> {
+    if (imageUrls.length < 2 || imageUrls.length > 10) {
+      throw new ProviderError('Un carrusel requiere entre 2 y 10 imágenes', {
+        count: imageUrls.length,
+      });
+    }
+    const children: string[] = [];
+    for (const url of imageUrls) {
+      const childId = await this.createMediaContainer({ image_url: url, is_carousel_item: 'true' });
+      await this.waitForContainer(childId);
+      children.push(childId);
+    }
+    const parentId = await this.createMediaContainer({
+      media_type: 'CAROUSEL',
+      children: children.join(','),
+      caption,
+    });
+    await this.waitForContainer(parentId);
+    const mediaId = await this.publishContainer(parentId);
+    const permalink = await this.getPermalink(mediaId);
+    logger.info({ mediaId, slides: imageUrls.length }, 'Instagram: carrusel publicado y verificado');
+    return permalink ? { mediaId, permalink } : { mediaId };
+  }
+
+  /**
    * Publica un video como Reel (único formato de video del feed vía API).
    * El procesamiento de video tarda más que el de imagen: timeout amplio.
    */

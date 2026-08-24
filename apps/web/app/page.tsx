@@ -35,7 +35,12 @@ interface Piece {
   status: string;
   approval: string;
   scheduledAt?: string;
-  media?: { filename: string; mime: string; kind: 'image' | 'video' };
+  media?: {
+    filename: string;
+    mime: string;
+    kind: 'image' | 'video' | 'carousel';
+    items?: Array<{ filename: string; mime: string }>;
+  };
 }
 
 const EDITABLE_STATUSES = new Set(['idea', 'draft', 'in_review', 'rejected']);
@@ -258,6 +263,23 @@ export default function Dashboard() {
       } else {
         setNotice(`No se pudo enviar: ${data.message ?? data.error}`);
       }
+      await refresh();
+    } finally {
+      setBusyPiece(null);
+    }
+  }
+
+  async function onGenerateCarousel(pieceId: string) {
+    setBusyPiece(pieceId);
+    setNotice('Generando carrusel (portada IA + láminas)…');
+    try {
+      const res = await fetch(`/api/content/${pieceId}/media/generate-carousel`, { method: 'POST' });
+      const data = await res.json();
+      setNotice(
+        res.ok
+          ? `Carrusel generado: ${data.slides} láminas.`
+          : `No se generó: ${data.message ?? data.error}`,
+      );
       await refresh();
     } finally {
       setBusyPiece(null);
@@ -529,7 +551,7 @@ export default function Dashboard() {
             {content.slice(0, 10).map((p) => (
               <li key={p.id}>
                 <div className="piece-row">
-                  {p.media?.kind === 'image' && (
+                  {(p.media?.kind === 'image' || p.media?.kind === 'carousel') && (
                     <img className="thumb" src={`/media/${p.media.filename}`} alt="" />
                   )}
                   <div className="piece-main">
@@ -544,6 +566,9 @@ export default function Dashboard() {
                     <div className="muted">
                       {p.format} · {p.pillar} · {p.funnel}
                       {p.media?.kind === 'video' && <> · 🎬 video adjunto (se publica como reel)</>}
+                      {p.media?.kind === 'carousel' && (
+                        <> · 🖼 carrusel ({p.media.items?.length ?? 0} láminas)</>
+                      )}
                       {p.status === 'scheduled' && p.scheduledAt && (
                         <> · ⏰ {new Date(p.scheduledAt).toLocaleString('es-CO')}</>
                       )}
@@ -637,6 +662,15 @@ export default function Dashboard() {
                         >
                           Plantilla
                         </button>
+                        {p.format === 'carousel' && (
+                          <button
+                            className="small secondary"
+                            disabled={busyPiece === p.id}
+                            onClick={() => void onGenerateCarousel(p.id)}
+                          >
+                            Carrusel IA
+                          </button>
+                        )}
                         {p.format === 'reel' && (
                           <button
                             className="small secondary"

@@ -300,6 +300,44 @@ export function registerContentRoutes(app: FastifyInstance, ctx: AppContext): vo
   });
 
   /**
+   * Genera el carrusel completo: portada con IA + láminas de texto con plantilla
+   * (una por punto del cuerpo). El material queda listo para publicarse como
+   * carrusel real de Instagram.
+   */
+  app.post('/api/content/:id/media/generate-carousel', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const piece = await ctx.store.getContent(DEFAULT_TENANT_ID, id);
+    if (!piece) return reply.status(404).send({ error: 'not_found' });
+    if (piece.status === 'published') {
+      return reply.status(409).send({ error: 'media_locked', message: 'La pieza ya fue publicada.' });
+    }
+    const brand = await ctx.store.getBrand(DEFAULT_TENANT_ID);
+    if (!brand) return reply.status(409).send({ error: 'brand_memory_missing' });
+
+    const { generateCarousel } = await import('../pipeline/image-generator.js');
+    try {
+      const generated = await generateCarousel(getEnv().GEMINI_API_KEY, brand, piece);
+      const previousFiles = [
+        piece.media?.filename,
+        ...(piece.media?.items?.map((i) => i.filename) ?? []),
+      ].filter((f): f is string => Boolean(f));
+
+      const updated = { ...piece, media: generated, updatedAt: new Date() };
+      await ctx.store.saveContent(updated);
+      const newFiles = new Set(generated.items.map((i) => i.filename));
+      for (const f of previousFiles) {
+        if (!newFiles.has(f)) await unlink(path.join(UPLOADS_DIR, f)).catch(() => {});
+      }
+      return reply.status(201).send({ piece: updated, slides: generated.items.length });
+    } catch (err) {
+      return reply.status(422).send({
+        error: 'carousel_generation_failed',
+        message: err instanceof Error ? err.message : 'error desconocido',
+      });
+    }
+  });
+
+  /**
    * Genera un video con Veo para la pieza (reels). Operación larga (1-5 min) y
    * de pago en Google: el dashboard avisa antes de invocarla.
    */
@@ -423,7 +461,7 @@ export function registerContentRoutes(app: FastifyInstance, ctx: AppContext): vo
 
     // Material: la URL explícita tiene prioridad; si no, el material subido a la pieza.
     // El video se publica como Reel.
-    let media: { url: string; kind: 'image' | 'video' } | undefined = parsed.data.imageUrl
+    let media: { url: string; kind: 'image' | 'video' | 'carousel'; urls?: string[] } | undefined = parsed.data.imageUrl
       ? { url: parsed.data.imageUrl, kind: 'image' }
       : undefined;
     if (!media) {
@@ -440,7 +478,13 @@ export function registerContentRoutes(app: FastifyInstance, ctx: AppContext): vo
           message: 'Configura OAUTH_REDIRECT_URI (túnel/dominio) para servir el material a Meta.',
         });
       }
-      media = { url: `${base}/media/${piece.media.filename}`, kind: piece.media.kind };
+      media = {
+        url: `${base}/media/${piece.media.filename}`,
+        kind: piece.media.kind,
+        ...(piece.media.kind === 'carousel' && piece.media.items
+          ? { urls: piece.media.items.map((i) => `${base}/media/${i.filename}`) }
+          : {}),
+      };
     }
 
     try {

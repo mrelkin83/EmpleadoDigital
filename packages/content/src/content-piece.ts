@@ -28,8 +28,16 @@ export interface ContentPiece {
   approval: 'not_required' | 'pending' | 'approved' | 'rejected';
   scheduledAt?: Date;
   publishedMediaId?: string;
-  /** Material subido por el usuario (imagen/video) para publicar esta pieza. */
-  media?: { filename: string; mime: string; kind: 'image' | 'video' };
+  /**
+   * Material de la pieza. `carousel`: `filename` es la portada y `items` trae
+   * todas las láminas en orden.
+   */
+  media?: {
+    filename: string;
+    mime: string;
+    kind: 'image' | 'video' | 'carousel';
+    items?: Array<{ filename: string; mime: string }>;
+  };
   /** Trazabilidad de generación (spec §39): proveedor/modelo que creó el borrador. */
   generatedBy?: { provider: string; model: string };
   createdAt: Date;

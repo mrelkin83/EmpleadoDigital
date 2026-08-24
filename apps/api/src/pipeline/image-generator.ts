@@ -110,6 +110,88 @@ export async function generateAiVideo(
   return { filename, mime: 'video/mp4', kind: 'video' };
 }
 
+export interface GeneratedCarousel {
+  filename: string;
+  mime: 'image/jpeg';
+  kind: 'carousel';
+  items: Array<{ filename: string; mime: string }>;
+}
+
+/**
+ * Carrusel completo (Fase 4): portada con IA (Gemini, si hay clave; plantilla
+ * si no o si falla) + una lámina de texto por punto del cuerpo, renderizada con
+ * plantilla determinista — el texto de las láminas nunca tiene erratas de IA.
+ */
+export async function generateCarousel(
+  geminiKey: string | undefined,
+  brand: BrandMemory,
+  piece: { hook: string; topic: string; pillar: string; body: string },
+): Promise<GeneratedCarousel> {
+  const points = extractPoints(piece.body);
+  if (points.length < 1) {
+    throw new Error('El cuerpo de la pieza no tiene puntos identificables para las láminas.');
+  }
+
+  const cover = geminiKey
+    ? await generateAiImage(geminiKey, brand, piece).catch(() => generateBrandImage(brand, piece))
+    : await generateBrandImage(brand, piece);
+
+  const slides: Array<{ filename: string; mime: string }> = [
+    { filename: cover.filename, mime: cover.mime },
+  ];
+  const total = Math.min(points.length, 9);
+  for (let i = 0; i < total; i++) {
+    slides.push(await renderTextSlide(brand, points[i]!, i + 1, total));
+  }
+
+  return { filename: cover.filename, mime: 'image/jpeg', kind: 'carousel', items: slides };
+}
+
+/** Extrae los puntos numerados/listados del cuerpo; fallback: párrafos largos. */
+function extractPoints(body: string): string[] {
+  const lines = body.split('\n').map((l) => l.trim()).filter(Boolean);
+  const numbered = lines
+    .filter((l) => /^(\d{1,2}[.):]|[0-9]️?⃣|[•▪➡-])\s*/u.test(l))
+    .map((l) => l.replace(/^(\d{1,2}[.):]|[0-9]️?⃣|[•▪➡-])\s*/u, '').trim());
+  if (numbered.length >= 2) return numbered;
+  // Sin lista: párrafos sustanciales (excluye hook/disclaimer cortos).
+  return body
+    .split(/\n{2,}/)
+    .map((p) => p.replace(/\n/g, ' ').trim())
+    .filter((p) => p.length > 60)
+    .slice(0, 6);
+}
+
+async function renderTextSlide(
+  brand: BrandMemory,
+  text: string,
+  index: number,
+  total: number,
+): Promise<{ filename: string; mime: string }> {
+  const lines = wrap(text, 30, 9);
+  const fontSize = lines.length <= 4 ? 54 : lines.length <= 6 ? 46 : 40;
+  const lineHeight = Math.round(fontSize * 1.3);
+  const startY = 380;
+
+  const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+  <rect width="${W}" height="${H}" fill="${BG}"/>
+  <text x="80" y="230" font-family="Arial, sans-serif" font-size="120" font-weight="bold" fill="${ACCENT}">${index}</text>
+  <rect x="80" y="270" width="120" height="8" fill="${ACCENT}"/>
+  ${lines
+    .map(
+      (line, i) =>
+        `<text x="80" y="${startY + i * lineHeight}" font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="bold" fill="${TEXT}">${escapeXml(line)}</text>`,
+    )
+    .join('\n  ')}
+  <text x="80" y="${H - 46}" font-family="Arial, sans-serif" font-size="34" font-weight="bold" fill="${ACCENT}">${escapeXml(brand.brandName)}</text>
+  <text x="${W - 80}" y="${H - 46}" text-anchor="end" font-family="Arial, sans-serif" font-size="34" fill="${MUTED}">${index} / ${total}</text>
+</svg>`;
+
+  const filename = `${randomUUID()}.jpg`;
+  await sharp(Buffer.from(svg)).jpeg({ quality: 92 }).toFile(path.join(UPLOADS_DIR, filename));
+  return { filename, mime: 'image/jpeg' };
+}
+
 /** Corta el texto en líneas de máximo `maxChars`, hasta `maxLines` (elipsis al final). */
 function wrap(text: string, maxChars: number, maxLines: number): string[] {
   const words = text.split(/\s+/);
