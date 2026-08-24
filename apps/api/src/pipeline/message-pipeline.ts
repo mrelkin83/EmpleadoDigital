@@ -3,6 +3,7 @@ import { classifyComment } from '@empleado/skills';
 import type { MetaMessageEvent } from '@empleado/social';
 import { logger } from '@empleado/shared';
 import { DEFAULT_TENANT_ID, type AppContext } from '../context.js';
+import { renderResponseTemplate } from './template.js';
 
 /**
  * Pipeline de mensajes directos (Fase 3, espejo del de comentarios):
@@ -82,9 +83,13 @@ export async function handleMessageEvent(ctx: AppContext, event: MetaMessageEven
     return;
   }
 
-  const responseText = rule.responseTemplate.replaceAll('{{username}}', '');
+  const brand = await ctx.store.getBrand(tenantId);
+  const rendered = brand
+    ? renderResponseTemplate(rule.responseTemplate, brand)
+    : { text: rule.responseTemplate.replaceAll('{{username}}', ''), missingWhatsapp: false };
+  const responseText = rendered.text;
 
-  if (decision.verdict === 'human_review') {
+  if (rendered.missingWhatsapp || decision.verdict === 'human_review') {
     await ctx.store.saveApproval({
       id: randomUUID(),
       tenantId,

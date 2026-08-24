@@ -32,6 +32,7 @@ interface Brand {
   disclaimers: string[];
   competitors: string[];
   contentPillars: string[];
+  contact?: { whatsappNumber?: string; whatsappGreeting?: string };
 }
 
 interface KeywordRule {
@@ -128,6 +129,14 @@ export default function BrandPage() {
         },
         disclaimers: lines(String(form.get('disclaimers') ?? '')),
         contentPillars: commas(String(form.get('contentPillars') ?? '')),
+        contact: {
+          ...(String(form.get('whatsappNumber') ?? '').trim()
+            ? { whatsappNumber: String(form.get('whatsappNumber')).trim() }
+            : {}),
+          ...(String(form.get('whatsappGreeting') ?? '').trim()
+            ? { whatsappGreeting: String(form.get('whatsappGreeting')).trim() }
+            : {}),
+        },
       };
       const res = await fetch('/api/brand', {
         method: 'PUT',
@@ -239,6 +248,24 @@ export default function BrandPage() {
         <label>
           Pilares de contenido (separados por coma)
           <input name="contentPillars" defaultValue={brand.contentPillars.join(', ')} required />
+        </label>
+        <label>
+          WhatsApp del embudo de conversión (con código de país, ej. 573001234567)
+          <input
+            name="whatsappNumber"
+            defaultValue={brand.contact?.whatsappNumber ?? ''}
+            maxLength={20}
+            placeholder="573001234567"
+          />
+        </label>
+        <label>
+          Mensaje con el que llega el interesado al WhatsApp (opcional)
+          <input
+            name="whatsappGreeting"
+            defaultValue={brand.contact?.whatsappGreeting ?? ''}
+            maxLength={300}
+            placeholder="Hola, vengo de Instagram y quiero una asesoría aduanera"
+          />
         </label>
         <button type="submit" disabled={saving}>
           {saving ? 'Guardando…' : 'Guardar marca'}

@@ -19,6 +19,11 @@ export interface BrandMemory {
   voice: BrandVoice;
   /** Disclaimers configurables por industria (spec §28). */
   disclaimers: string[];
+  /**
+   * Embudo de conversión (spec §78): a dónde se dirige a los interesados.
+   * El número va con código de país sin signos (ej. 573001234567).
+   */
+  contact?: { whatsappNumber?: string; whatsappGreeting?: string };
   competitors: string[];
   faq: Array<{ question: string; answer: string; verification: KnowledgeVerification }>;
   contentPillars: string[];
@@ -56,6 +61,14 @@ export interface BrandMemoryRepository {
  * Serializa el contexto de marca relevante para un prompt de generación.
  * Recuperación selectiva: solo lo necesario para la tarea (spec §17, §47).
  */
+/** Enlace wa.me del embudo de conversión, o null si no está configurado. */
+export function whatsappLink(memory: BrandMemory): string | null {
+  const digits = memory.contact?.whatsappNumber?.replace(/\D/g, '');
+  if (!digits) return null;
+  const greeting = memory.contact?.whatsappGreeting;
+  return `https://wa.me/${digits}${greeting ? `?text=${encodeURIComponent(greeting)}` : ''}`;
+}
+
 export function brandContextForPrompt(memory: BrandMemory): string {
   return [
     `Marca: ${memory.brandName} (${memory.sector} / ${memory.niche}, mercado: ${memory.market}).`,

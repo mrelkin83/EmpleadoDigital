@@ -3,6 +3,7 @@ import { classifyComment } from '@empleado/skills';
 import type { MetaCommentEvent } from '@empleado/social';
 import { logger } from '@empleado/shared';
 import { DEFAULT_TENANT_ID, type AppContext } from '../context.js';
+import { renderResponseTemplate } from './template.js';
 
 /**
  * Pipeline de comentarios (Fase 3 del roadmap, sembrado desde el patrón instabot):
@@ -84,9 +85,15 @@ export async function handleCommentEvent(ctx: AppContext, event: MetaCommentEven
     return;
   }
 
-  const responseText = rule.responseTemplate.replaceAll('{{username}}', event.from.username);
+  const brand = await ctx.store.getBrand(tenantId);
+  const rendered = brand
+    ? renderResponseTemplate(rule.responseTemplate, brand, { username: event.from.username })
+    : { text: rule.responseTemplate.replaceAll('{{username}}', event.from.username), missingWhatsapp: false };
+  const responseText = rendered.text;
 
-  if (decision.verdict === 'human_review') {
+  // Plantilla con {{whatsapp}} sin número configurado: nunca enviar un mensaje
+  // roto — escala a humano con la causa.
+  if (rendered.missingWhatsapp || decision.verdict === 'human_review') {
     await ctx.store.saveApproval({
       id: randomUUID(),
       tenantId,

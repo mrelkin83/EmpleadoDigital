@@ -53,6 +53,12 @@ export function registerMiscRoutes(app: FastifyInstance, ctx: AppContext): void 
         languageCode: z.string().max(10),
       }),
       disclaimers: z.array(z.string().max(500)).max(20),
+      contact: z
+        .object({
+          whatsappNumber: z.string().max(20).regex(/^[\d+\s()-]*$/).optional(),
+          whatsappGreeting: z.string().max(300).optional(),
+        })
+        .optional(),
       competitors: z.array(z.string().max(200)).max(50),
       contentPillars: z.array(z.string().max(80)).min(1).max(20),
     })

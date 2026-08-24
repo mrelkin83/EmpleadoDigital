@@ -191,7 +191,7 @@ function defaultPilotKeywordRules(): KeywordRule[] {
       enabled: true,
       cooldownMinutes: 1440,
       responseTemplate:
-        'Hola {{username}}, gracias por escribir. Cuéntame brevemente tu caso (importación, mercancía retenida o requerimiento de la DIAN) y te indico cómo agendar una revisión con el abogado.',
+        'Hola {{username}}, gracias por escribir. Cuéntame brevemente tu caso (importación, mercancía retenida o requerimiento de la DIAN) o escríbenos directo al WhatsApp para agendar una revisión: {{whatsapp}}',
     },
     {
       id: randomUUID(),
@@ -202,7 +202,7 @@ function defaultPilotKeywordRules(): KeywordRule[] {
       enabled: true,
       cooldownMinutes: 1440,
       responseTemplate:
-        'Hola {{username}}, los honorarios dependen del tipo de caso. Escríbeme qué necesitas (importación, retención de mercancía, requerimiento DIAN) y te comparto la información de la consulta inicial.',
+        'Hola {{username}}, los honorarios dependen del tipo de caso. Escríbenos por WhatsApp contándonos qué necesitas y te compartimos la información de la consulta inicial: {{whatsapp}}',
     },
     {
       id: randomUUID(),
@@ -213,7 +213,7 @@ function defaultPilotKeywordRules(): KeywordRule[] {
       enabled: true,
       cooldownMinutes: 720,
       responseTemplate:
-        'Hola {{username}}, entiendo la urgencia: los plazos aduaneros son cortos. Escríbeme por mensaje directo con el número de acta o documento que te entregaron y el abogado revisa tu caso.',
+        'Hola {{username}}, entiendo la urgencia: los plazos aduaneros son cortos. Escríbenos YA por WhatsApp con el número de acta o documento que te entregaron y el abogado revisa tu caso: {{whatsapp}}',
     },
   ];
 }
