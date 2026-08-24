@@ -83,16 +83,20 @@ export class PgStore implements Store {
   async saveContent(p: ContentPiece): Promise<void> {
     await this.sql`
       INSERT INTO content_pieces (id, tenant_id, format, pillar, funnel, topic, hook, body, cta,
-        status, approval, scheduled_at, published_media_id, generated_by, created_at, updated_at)
+        status, approval, scheduled_at, published_media_id, media, generated_by, created_at, updated_at)
       VALUES (${p.id}, ${p.tenantId}, ${p.format}, ${p.pillar}, ${p.funnel}, ${p.topic}, ${p.hook},
         ${p.body}, ${p.cta}, ${p.status}, ${p.approval}, ${p.scheduledAt ?? null},
         ${p.publishedMediaId ?? null},
+        ${p.media ? this.sql.json(p.media as unknown as postgres.JSONValue) : null},
         ${p.generatedBy ? this.sql.json(p.generatedBy as unknown as postgres.JSONValue) : null},
         ${p.createdAt}, ${p.updatedAt})
       ON CONFLICT (id) DO UPDATE SET
+        format = EXCLUDED.format, pillar = EXCLUDED.pillar, funnel = EXCLUDED.funnel,
+        topic = EXCLUDED.topic,
         hook = EXCLUDED.hook, body = EXCLUDED.body, cta = EXCLUDED.cta,
         status = EXCLUDED.status, approval = EXCLUDED.approval,
         scheduled_at = EXCLUDED.scheduled_at, published_media_id = EXCLUDED.published_media_id,
+        media = EXCLUDED.media,
         updated_at = EXCLUDED.updated_at`;
   }
 
@@ -210,6 +214,7 @@ function rowToPiece(r: postgres.Row): ContentPiece {
     approval: r['approval'] as ContentPiece['approval'],
     ...(r['scheduled_at'] ? { scheduledAt: r['scheduled_at'] as Date } : {}),
     ...(r['published_media_id'] ? { publishedMediaId: r['published_media_id'] as string } : {}),
+    ...(r['media'] ? { media: r['media'] as NonNullable<ContentPiece['media']> } : {}),
     ...(r['generated_by']
       ? { generatedBy: r['generated_by'] as NonNullable<ContentPiece['generatedBy']> }
       : {}),

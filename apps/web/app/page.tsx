@@ -32,6 +32,7 @@ interface Piece {
   hook: string;
   status: string;
   approval: string;
+  media?: { filename: string; mime: string; kind: 'image' | 'video' };
 }
 
 interface Health {
@@ -58,6 +59,8 @@ export default function Dashboard() {
   const [calendar, setCalendar] = useState<Slot[]>([]);
   const [planning, setPlanning] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [busyPiece, setBusyPiece] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -125,6 +128,48 @@ export default function Dashboard() {
   async function resolveApproval(id: string, action: 'approve' | 'reject') {
     await fetch(`/api/approvals/${id}/${action}`, { method: 'POST' });
     await refresh();
+  }
+
+  async function onUploadMedia(pieceId: string, file: File | undefined) {
+    if (!file) return;
+    setBusyPiece(pieceId);
+    setNotice(null);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch(`/api/content/${pieceId}/media`, { method: 'POST', body: form });
+      const data = await res.json();
+      setNotice(
+        res.ok
+          ? `Material subido (${file.name}).`
+          : `No se pudo subir: ${data.message ?? data.error}`,
+      );
+      await refresh();
+    } catch {
+      setNotice('Error subiendo el material.');
+    } finally {
+      setBusyPiece(null);
+    }
+  }
+
+  async function onPublish(pieceId: string) {
+    if (!confirm('Esto publica la pieza en la cuenta REAL de Instagram. ¿Continuar?')) return;
+    setBusyPiece(pieceId);
+    setNotice(null);
+    try {
+      const res = await fetch(`/api/content/${pieceId}/publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ humanApproved: true }),
+      });
+      const data = await res.json();
+      setNotice(res.ok ? '¡Publicado en Instagram!' : `No se publicó: ${data.message ?? data.error}`);
+      await refresh();
+    } catch {
+      setNotice('Error publicando la pieza.');
+    } finally {
+      setBusyPiece(null);
+    }
   }
 
   return (
@@ -202,6 +247,7 @@ export default function Dashboard() {
 
         <section className="card">
           <h2>Contenido</h2>
+          {notice && <p className="muted" style={{ marginBottom: 8 }}>{notice}</p>}
           {content.length === 0 && <p className="empty">Aún no hay piezas. Genera la primera.</p>}
           <ul className="plain">
             {content.slice(0, 8).map((p) => (
@@ -210,7 +256,34 @@ export default function Dashboard() {
                 <strong>{p.hook || p.topic}</strong>
                 <div className="muted">
                   {p.format} · {p.pillar} · {p.funnel}
+                  {p.media && <> · 📎 {p.media.kind === 'image' ? 'imagen' : 'video'} adjunto</>}
                 </div>
+                {p.status !== 'published' && (
+                  <div className="actions">
+                    <label className="small secondary" style={{ cursor: 'pointer' }}>
+                      {busyPiece === p.id ? 'Procesando…' : p.media ? 'Cambiar material' : 'Subir material'}
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,video/mp4"
+                        style={{ display: 'none' }}
+                        disabled={busyPiece === p.id}
+                        onChange={(e) => {
+                          void onUploadMedia(p.id, e.target.files?.[0]);
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                    {p.status === 'approved' && p.media?.kind === 'image' && (
+                      <button
+                        className="small"
+                        disabled={busyPiece === p.id}
+                        onClick={() => void onPublish(p.id)}
+                      >
+                        Publicar en Instagram
+                      </button>
+                    )}
+                  </div>
+                )}
               </li>
             ))}
           </ul>

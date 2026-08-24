@@ -28,6 +28,8 @@ export interface ContentPiece {
   approval: 'not_required' | 'pending' | 'approved' | 'rejected';
   scheduledAt?: Date;
   publishedMediaId?: string;
+  /** Material subido por el usuario (imagen/video) para publicar esta pieza. */
+  media?: { filename: string; mime: string; kind: 'image' | 'video' };
   /** Trazabilidad de generación (spec §39): proveedor/modelo que creó el borrador. */
   generatedBy?: { provider: string; model: string };
   createdAt: Date;

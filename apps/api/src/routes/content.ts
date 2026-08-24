@@ -4,7 +4,13 @@ import { runQualityGate, canTransition } from '@empleado/content';
 import { generateCaption, publishPost } from '@empleado/skills';
 import { ApprovalRequiredError, PolicyViolationError } from '@empleado/shared';
 import { randomUUID } from 'node:crypto';
+import { createWriteStream } from 'node:fs';
+import { unlink } from 'node:fs/promises';
+import path from 'node:path';
+import { pipeline } from 'node:stream/promises';
 import { DEFAULT_TENANT_ID, type AppContext } from '../context.js';
+import { UPLOADS_DIR } from '../server.js';
+import { getEnv } from '../env.js';
 
 const generateSchema = z.object({
   pillar: z.string().min(1).max(80),
@@ -14,9 +20,23 @@ const generateSchema = z.object({
 });
 
 const publishSchema = z.object({
-  imageUrl: z.string().url(),
+  // Opcional: si no se pasa, se usa el material subido a la pieza (POST :id/media).
+  imageUrl: z.string().url().optional(),
   humanApproved: z.boolean().default(false),
 });
+
+/** Tipos de material aceptados. El video se guarda pero aún no se publica (reels: fase posterior). */
+const MEDIA_TYPES: Record<string, { ext: string; kind: 'image' | 'video' }> = {
+  'image/jpeg': { ext: 'jpg', kind: 'image' },
+  'image/png': { ext: 'png', kind: 'image' },
+  'video/mp4': { ext: 'mp4', kind: 'video' },
+};
+
+/** Origen público (túnel/dominio) desde el que Meta puede descargar /media/. */
+function publicBaseUrl(): string | null {
+  const uri = getEnv().OAUTH_REDIRECT_URI;
+  return uri ? new URL(uri).origin : null;
+}
 
 const editSchema = z
   .object({
@@ -113,6 +133,55 @@ export function registerContentRoutes(app: FastifyInstance, ctx: AppContext): vo
     return { piece: updated, qualityGate: gate };
   });
 
+  /**
+   * Sube el material (imagen o video) de una pieza. Reemplaza el anterior si existía.
+   * El archivo queda en uploads/ y se sirve públicamente en /media/<filename> para
+   * que la API de Instagram pueda descargarlo.
+   */
+  app.post('/api/content/:id/media', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const piece = await ctx.store.getContent(DEFAULT_TENANT_ID, id);
+    if (!piece) return reply.status(404).send({ error: 'not_found' });
+    if (piece.status === 'published') {
+      return reply.status(409).send({ error: 'media_locked', message: 'La pieza ya fue publicada.' });
+    }
+
+    const file = await request.file();
+    if (!file) return reply.status(400).send({ error: 'file_missing' });
+    const type = MEDIA_TYPES[file.mimetype];
+    if (!type) {
+      return reply.status(415).send({
+        error: 'unsupported_media_type',
+        message: `Tipo "${file.mimetype}" no soportado. Usa JPEG, PNG o MP4.`,
+      });
+    }
+
+    const filename = `${randomUUID()}.${type.ext}`;
+    const filePath = path.join(UPLOADS_DIR, filename);
+    await pipeline(file.file, createWriteStream(filePath));
+    if (file.file.truncated) {
+      await unlink(filePath).catch(() => {});
+      return reply.status(413).send({ error: 'file_too_large', message: 'Máximo 100 MB.' });
+    }
+
+    const previous = piece.media?.filename;
+    const updated = {
+      ...piece,
+      media: { filename, mime: file.mimetype, kind: type.kind },
+      updatedAt: new Date(),
+    };
+    await ctx.store.saveContent(updated);
+    if (previous && previous !== filename) {
+      await unlink(path.join(UPLOADS_DIR, previous)).catch(() => {});
+    }
+
+    const base = publicBaseUrl();
+    return reply.status(201).send({
+      piece: updated,
+      mediaUrl: base ? `${base}/media/${filename}` : `/media/${filename}`,
+    });
+  });
+
   /** Envía una pieza a revisión y crea la solicitud de aprobación (human-in-the-loop). */
   app.post('/api/content/:id/submit', async (request, reply) => {
     const { id } = request.params as { id: string };
@@ -161,11 +230,36 @@ export function registerContentRoutes(app: FastifyInstance, ctx: AppContext): vo
       });
     }
 
+    // Imagen: la URL explícita tiene prioridad; si no, el material subido a la pieza.
+    let imageUrl = parsed.data.imageUrl;
+    if (!imageUrl) {
+      if (!piece.media) {
+        return reply.status(400).send({
+          error: 'image_missing',
+          message: 'Sube el material de la pieza (POST /api/content/:id/media) o pasa imageUrl.',
+        });
+      }
+      if (piece.media.kind !== 'image') {
+        return reply.status(422).send({
+          error: 'video_publish_not_supported',
+          message: 'La publicación de video (reels) aún no está implementada; sube una imagen.',
+        });
+      }
+      const base = publicBaseUrl();
+      if (!base) {
+        return reply.status(409).send({
+          error: 'public_url_missing',
+          message: 'Configura OAUTH_REDIRECT_URI (túnel/dominio) para servir el material a Meta.',
+        });
+      }
+      imageUrl = `${base}/media/${piece.media.filename}`;
+    }
+
     try {
       const result = await publishPost(ctx.instagram, ctx.policyEngine, {
         piece,
         brand,
-        imageUrl: parsed.data.imageUrl,
+        imageUrl,
         humanApproved: parsed.data.humanApproved,
         policyContext: {
           tenantId: DEFAULT_TENANT_ID,

@@ -15,10 +15,10 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "dev:api": "tsx watch apps/api/src/index.ts",
-    "dev:worker": "tsx watch apps/worker/src/index.ts",
+    "dev:api": "tsx watch --env-file-if-exists=.env apps/api/src/index.ts",
+    "dev:worker": "tsx watch --env-file-if-exists=.env apps/worker/src/index.ts",
     "dev:web": "npm run dev --workspace apps/web",
-    "db:migrate": "tsx db/migrate.ts"
+    "db:migrate": "tsx --env-file-if-exists=.env db/migrate.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
