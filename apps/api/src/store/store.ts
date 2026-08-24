@@ -66,5 +66,8 @@ export interface Store {
   upsertLead(lead: Omit<Lead, 'id' | 'createdAt'>): Promise<void>;
   listLeads(tenantId: string): Promise<Lead[]>;
 
+  /** Dedupe del polling de comentarios: true si es la primera vez que se ve el comentario. */
+  markCommentProcessed(tenantId: string, commentId: string): Promise<boolean>;
+
   close(): Promise<void>;
 }

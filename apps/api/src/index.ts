@@ -2,6 +2,7 @@ import { logger } from '@empleado/shared';
 import { buildContext } from './context.js';
 import { buildServer } from './server.js';
 import { getEnv } from './env.js';
+import { startCommentPolling } from './pipeline/comment-poller.js';
 
 async function main(): Promise<void> {
   const env = getEnv();
@@ -11,7 +12,10 @@ async function main(): Promise<void> {
   await app.listen({ port: env.API_PORT, host: env.API_HOST });
   logger.info({ port: env.API_PORT }, 'API del empleado digital escuchando');
 
+  const stopPolling = startCommentPolling(ctx);
+
   const shutdown = async () => {
+    stopPolling();
     await app.close();
     await ctx.store.close();
     process.exit(0);

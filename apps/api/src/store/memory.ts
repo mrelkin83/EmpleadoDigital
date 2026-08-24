@@ -12,6 +12,7 @@ export class MemoryStore implements Store {
   private approvals = new Map<string, ApprovalRequest>();
   private leads = new Map<string, Lead>();
   private socialAccounts = new Map<string, StoredSocialAccount>();
+  private processedComments = new Set<string>();
 
   async getSocialAccount(tenantId: string, platform: string): Promise<StoredSocialAccount | null> {
     return this.socialAccounts.get(`${tenantId}:${platform}`) ?? null;
@@ -92,6 +93,13 @@ export class MemoryStore implements Store {
 
   async listLeads(tenantId: string): Promise<Lead[]> {
     return [...this.leads.values()].filter((l) => l.tenantId === tenantId);
+  }
+
+  async markCommentProcessed(tenantId: string, commentId: string): Promise<boolean> {
+    const key = `${tenantId}:${commentId}`;
+    if (this.processedComments.has(key)) return false;
+    this.processedComments.add(key);
+    return true;
   }
 
   async close(): Promise<void> {

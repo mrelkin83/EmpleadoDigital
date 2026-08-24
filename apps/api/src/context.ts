@@ -88,6 +88,7 @@ export async function buildContext(): Promise<AppContext> {
         businessAccountId: account.externalAccountId,
       });
       ctx.grantedScopes = account.grantedScopes;
+      subscribeAccountToWebhooks(ctx.instagram);
     },
   };
 
@@ -150,8 +151,21 @@ async function restoreInstagramConnection(ctx: AppContext): Promise<void> {
       'instagram_business_manage_messages',
     ];
     logger.info('Instagram configurado por variables de entorno (modo desarrollo)');
+    subscribeAccountToWebhooks(ctx.instagram);
     return;
   }
 
   logger.warn('Instagram no conectado: usa /auth/instagram/login (OAuth) o variables INSTAGRAM_*');
+}
+
+/**
+ * Suscripción de la cuenta a los webhooks de la app (requisito de Meta: sin
+ * subscribed_apps no llegan eventos). Fire-and-forget: un fallo no debe impedir
+ * el arranque ni la conexión; se registra y se reintenta en el próximo arranque.
+ */
+function subscribeAccountToWebhooks(connector: InstagramConnector): void {
+  void connector
+    .subscribeToWebhooks(['comments', 'messages'])
+    .then(() => logger.info('Cuenta suscrita a los webhooks de la app (subscribed_apps)'))
+    .catch((err) => logger.warn({ err }, 'No se pudo suscribir la cuenta a los webhooks'));
 }

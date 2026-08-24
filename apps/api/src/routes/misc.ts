@@ -10,6 +10,13 @@ export function registerMiscRoutes(app: FastifyInstance, ctx: AppContext): void 
     time: new Date().toISOString(),
   }));
 
+  // Política de privacidad pública: requisito de Meta para pasar la app a modo Live
+  // (Configuración → Básica → URL de la política de privacidad). Servida por la API
+  // para que sea accesible por el túnel/dominio sin infraestructura extra.
+  app.get('/privacidad', async (_request, reply) => {
+    return reply.type('text/html; charset=utf-8').send(PRIVACY_HTML);
+  });
+
   // --- Brand Memory (spec §17) ---
   app.get('/api/brand', async (_request, reply) => {
     const brand = await ctx.store.getBrand(DEFAULT_TENANT_ID);
@@ -147,3 +154,40 @@ export function registerMiscRoutes(app: FastifyInstance, ctx: AppContext): void 
     return resolved;
   });
 }
+
+/** Contenido de la política de privacidad (es-CO). Ajustar al pasar a fase SaaS. */
+const PRIVACY_HTML = `<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Política de privacidad</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; line-height: 1.6; color: #222; }
+    h1 { font-size: 1.5rem; } h2 { font-size: 1.1rem; margin-top: 1.5rem; }
+  </style>
+</head>
+<body>
+  <h1>Política de privacidad</h1>
+  <p>Esta aplicación gestiona la presencia en Instagram de la cuenta profesional conectada
+  (publicación de contenido, moderación de comentarios y mensajes) usando exclusivamente
+  las APIs oficiales de Meta.</p>
+  <h2>Datos que se tratan</h2>
+  <p>Con autorización expresa del titular de la cuenta: datos básicos del perfil profesional,
+  tokens de acceso (cifrados en reposo), contenido publicado, comentarios y mensajes recibidos.
+  No se recopilan datos de usuarios que no interactúen con la cuenta conectada.</p>
+  <h2>Uso</h2>
+  <p>Los datos se usan únicamente para operar las funciones descritas: publicar contenido
+  aprobado, responder comentarios y mensajes, y medir el rendimiento de las publicaciones.
+  No se venden ni se comparten con terceros.</p>
+  <h2>Conservación y eliminación</h2>
+  <p>Los tokens y datos se conservan mientras la cuenta esté conectada. El titular puede
+  revocar el acceso en cualquier momento desde la configuración de Instagram
+  (Sitio web y permisos → Apps y sitios web), lo que invalida el token de acceso.
+  Para solicitar la eliminación de datos almacenados: contactar al administrador de la app.</p>
+  <h2>Contacto</h2>
+  <p>Responsable: administrador de la aplicación. Contacto a través del correo registrado
+  en la app de Meta for Developers.</p>
+  <p><em>Última actualización: agosto de 2026.</em></p>
+</body>
+</html>`;

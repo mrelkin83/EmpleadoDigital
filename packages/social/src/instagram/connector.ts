@@ -25,8 +25,20 @@ export interface MediaInsights {
   metrics: Record<string, number>;
 }
 
+export interface MediaComment {
+  id: string;
+  text?: string;
+  timestamp?: string;
+  from?: { id: string; username: string };
+}
+
 export class InstagramConnector {
   constructor(private readonly config: InstagramConnectorConfig) {}
+
+  /** ID de la cuenta conectada (para distinguir comentarios propios en el polling). */
+  get accountId(): string {
+    return this.config.businessAccountId;
+  }
 
   /**
    * Publica una imagen con caption. Flujo oficial de dos pasos:
@@ -34,10 +46,42 @@ export class InstagramConnector {
    */
   async publishImage(imageUrl: string, caption: string): Promise<PublishResult> {
     const containerId = await this.createMediaContainer({ image_url: imageUrl, caption });
+    await this.waitForContainer(containerId);
     const mediaId = await this.publishContainer(containerId);
     const permalink = await this.getPermalink(mediaId);
     logger.info({ mediaId }, 'Instagram: publicación verificada');
     return permalink ? { mediaId, permalink } : { mediaId };
+  }
+
+  /**
+   * Meta procesa el contenedor de forma asíncrona (descarga la imagen, la valida);
+   * publicarlo antes de que esté FINISHED devuelve el error 9007 "Media ID is not
+   * available". Se sondea status_code con backoff hasta FINISHED o timeout.
+   */
+  private async waitForContainer(containerId: string, timeoutMs = 90_000): Promise<void> {
+    const start = Date.now();
+    let delayMs = 2_000;
+    for (;;) {
+      const { status_code: status } = await this.get<{ status_code?: string }>(`/${containerId}`, {
+        fields: 'status_code',
+      });
+      if (status === 'FINISHED') return;
+      if (status === 'ERROR' || status === 'EXPIRED') {
+        throw new ProviderError(`Instagram: el contenedor de media terminó en estado ${status}`, {
+          containerId,
+          status,
+        });
+      }
+      if (Date.now() - start > timeoutMs) {
+        throw new ProviderError('Instagram: el contenedor de media no estuvo listo a tiempo', {
+          containerId,
+          status: status ?? 'desconocido',
+        });
+      }
+      logger.info({ containerId, status }, 'Instagram: contenedor en proceso, esperando');
+      await new Promise((r) => setTimeout(r, delayMs));
+      delayMs = Math.min(delayMs * 1.5, 10_000);
+    }
   }
 
   private async createMediaContainer(params: Record<string, string>): Promise<string> {
@@ -62,6 +106,17 @@ export class InstagramConnector {
     }
   }
 
+  /**
+   * Suscribe la cuenta a los webhooks de la app. Requisito de Meta (Instagram Login):
+   * sin esta llamada la app no recibe eventos de la cuenta aunque el webhook esté
+   * verificado y los campos activados en el panel.
+   */
+  async subscribeToWebhooks(fields: string[]): Promise<{ success: boolean }> {
+    return this.post<{ success: boolean }>(`/${this.config.businessAccountId}/subscribed_apps`, {
+      subscribed_fields: fields.join(','),
+    });
+  }
+
   /** Métricas propias de una publicación (spec §23). */
   async getMediaInsights(mediaId: string, metrics: string[]): Promise<MediaInsights> {
     const data = await this.get<{ data: Array<{ name: string; values: Array<{ value: number }> }> }>(
@@ -82,6 +137,19 @@ export class InstagramConnector {
       { fields: 'id,caption,timestamp', limit: String(limit) },
     );
     return data.data;
+  }
+
+  /**
+   * Comentarios de una publicación propia. Base del polling de comentarios: los
+   * webhooks de comments no se entregan hasta publicar la app (App Review), así
+   * que en desarrollo el Community Manager los lee por API.
+   */
+  async getMediaComments(mediaId: string, limit = 50): Promise<MediaComment[]> {
+    const data = await this.get<{ data?: MediaComment[] }>(`/${mediaId}/comments`, {
+      fields: 'id,text,timestamp,from',
+      limit: String(limit),
+    });
+    return data.data ?? [];
   }
 
   /** Envía un DM de texto (solo debe invocarse tras un verdict 'allow' del Policy Engine). */

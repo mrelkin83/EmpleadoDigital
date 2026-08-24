@@ -194,6 +194,14 @@ export class PgStore implements Store {
     }));
   }
 
+  async markCommentProcessed(tenantId: string, commentId: string): Promise<boolean> {
+    const result = await this.sql`
+      INSERT INTO processed_comments (tenant_id, comment_id)
+      VALUES (${tenantId}, ${commentId})
+      ON CONFLICT DO NOTHING`;
+    return result.count > 0;
+  }
+
   async close(): Promise<void> {
     await this.sql.end();
   }
