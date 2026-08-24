@@ -105,7 +105,7 @@ async function suggestTopics(
         brandContextForPrompt(input.brand),
         `Responde SOLO con un array JSON de ${funnels.length} strings (un tema concreto por publicación, en el orden dado).`,
       ].join('\n'),
-      prompt: `Propón temas para la semana que inicia ${input.weekStart}. Etapas del funnel en orden: ${funnels.join(', ')}. No antepongas la etapa ni el pilar al tema: solo el tema.`,
+      prompt: `Propón temas para la semana que inicia ${input.weekStart}. Etapas del funnel en orden: ${funnels.join(', ')}. Cada tema: una sola frase concisa (máximo 15 palabras), sin explicaciones entre paréntesis, sin comillas, sin anteponer la etapa ni el pilar.`,
       maxTokens: 1024,
     },
   });
@@ -122,12 +122,24 @@ async function suggestTopics(
   return [];
 }
 
-/** Quita prefijos de etapa ("TOFU — ", "MOFU: ") que la IA a veces antepone, y limita longitud. */
+/**
+ * Sanea un tema sugerido: quita prefijos de etapa ("TOFU — "), comillas
+ * envolventes y explicaciones entre paréntesis al final; si aun así excede el
+ * tope, corta en límite de palabra con elipsis (nunca a mitad de palabra).
+ */
 function cleanTopic(topic: string): string {
-  return topic
+  let t = topic
     .replace(/^\s*(?:TOFU|MOFU|BOFU)\s*[—–:-]\s*/i, '')
-    .trim()
-    .slice(0, 200);
+    .replace(/\s*\([^)]*\)\s*$/, '')
+    .trim();
+  if ((t.startsWith("'") && t.endsWith("'")) || (t.startsWith('"') && t.endsWith('"'))) {
+    t = t.slice(1, -1).trim();
+  }
+  if (t.length > 200) {
+    const cut = t.slice(0, 199);
+    t = `${cut.slice(0, Math.max(cut.lastIndexOf(' '), 150))}…`;
+  }
+  return t;
 }
 
 function objectiveFor(funnel: FunnelStage): string {

@@ -122,7 +122,8 @@ export default function Dashboard() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [edit, setEdit] = useState<{ hook: string; body: string; cta: string } | null>(null);
   const [gateFails, setGateFails] = useState<Record<string, string[]>>({});
-  const [editSlot, setEditSlot] = useState<{ id: string; topic: string } | null>(null);
+  const [editSlot, setEditSlot] = useState<{ id: string; topic: string; date: string; time: string } | null>(null);
+  const [newSlot, setNewSlot] = useState<{ date: string; time: string; format: string; funnel: string; pillar: string; topic: string } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -284,13 +285,46 @@ export default function Dashboard() {
     }
   }
 
-  async function onSaveSlotTopic(slotId: string, topic: string) {
+  async function onSaveSlot(slotId: string, changes: { topic: string; date: string; time: string }) {
+    const res = await fetch(`/api/calendar/${slotId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(changes),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      setNotice(`No se guardó el slot: ${data.message ?? data.error}`);
+    }
+    setEditSlot(null);
+    await refresh();
+  }
+
+  async function onSkipSlot(slotId: string) {
+    if (!confirm('¿Omitir esta publicación del plan? (no se borra, queda marcada como omitida)')) return;
     await fetch(`/api/calendar/${slotId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topic }),
+      body: JSON.stringify({ status: 'skipped' }),
     });
-    setEditSlot(null);
+    await refresh();
+  }
+
+  async function onCreateSlot() {
+    if (!newSlot?.date || !newSlot.topic || newSlot.topic.length < 3) {
+      setNotice('El nuevo slot necesita fecha y un tema de al menos 3 caracteres.');
+      return;
+    }
+    const res = await fetch('/api/calendar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newSlot),
+    });
+    if (res.ok) {
+      setNewSlot(null);
+    } else {
+      const data = await res.json();
+      setNotice(`No se creó: ${data.message ?? data.error}`);
+    }
     await refresh();
   }
 
@@ -677,23 +711,39 @@ export default function Dashboard() {
             <p className="empty">Sin publicaciones planificadas para los próximos días.</p>
           )}
           <ul className="plain">
-            {calendar.slice(0, 7).map((s) => (
+            {calendar.filter((s) => s.status !== 'skipped').slice(0, 8).map((s) => (
               <li key={s.id}>
                 <span className={`badge ${s.status === 'planned' ? 'draft' : s.status}`}>{s.funnel}</span>
                 {editSlot?.id === s.id ? (
                   <div className="detail">
                     <textarea
-                      rows={4}
+                      rows={3}
                       maxLength={200}
                       value={editSlot.topic}
-                      onChange={(e) => setEditSlot({ id: s.id, topic: e.target.value })}
+                      onChange={(e) => setEditSlot({ ...editSlot, topic: e.target.value })}
                     />
                     <div className="actions">
+                      <input
+                        type="date"
+                        value={editSlot.date}
+                        onChange={(e) => setEditSlot({ ...editSlot, date: e.target.value })}
+                      />
+                      <input
+                        type="time"
+                        value={editSlot.time}
+                        onChange={(e) => setEditSlot({ ...editSlot, time: e.target.value })}
+                      />
                       <button
                         className="small"
-                        onClick={() => void onSaveSlotTopic(s.id, editSlot.topic)}
+                        onClick={() =>
+                          void onSaveSlot(s.id, {
+                            topic: editSlot.topic,
+                            date: editSlot.date,
+                            time: editSlot.time,
+                          })
+                        }
                       >
-                        Guardar tema
+                        Guardar
                       </button>
                       <button className="small secondary" onClick={() => setEditSlot(null)}>
                         Cancelar
@@ -704,13 +754,19 @@ export default function Dashboard() {
                   <>
                     <strong style={{ overflowWrap: 'anywhere' }}>{s.topic}</strong>
                     <div className="muted">
-                      {s.date} {s.time} · {s.format} · {s.pillar} ·{' '}
+                      {s.date} {s.time} · {s.format} · {s.pillar}
+                    </div>
+                    <div className="actions">
                       <button
-                        className="piece-title"
-                        style={{ fontSize: 12 }}
-                        onClick={() => setEditSlot({ id: s.id, topic: s.topic })}
+                        className="small secondary"
+                        onClick={() =>
+                          setEditSlot({ id: s.id, topic: s.topic, date: s.date, time: s.time })
+                        }
                       >
-                        editar tema
+                        Editar
+                      </button>
+                      <button className="small danger" onClick={() => void onSkipSlot(s.id)}>
+                        Omitir
                       </button>
                     </div>
                   </>
@@ -718,10 +774,73 @@ export default function Dashboard() {
               </li>
             ))}
           </ul>
+          {newSlot ? (
+            <div className="detail">
+              <textarea
+                rows={2}
+                maxLength={200}
+                placeholder="Tema de la publicación"
+                value={newSlot.topic}
+                onChange={(e) => setNewSlot({ ...newSlot, topic: e.target.value })}
+              />
+              <div className="actions">
+                <input
+                  type="date"
+                  value={newSlot.date}
+                  onChange={(e) => setNewSlot({ ...newSlot, date: e.target.value })}
+                />
+                <input
+                  type="time"
+                  value={newSlot.time}
+                  onChange={(e) => setNewSlot({ ...newSlot, time: e.target.value })}
+                />
+                <select
+                  value={newSlot.format}
+                  onChange={(e) => setNewSlot({ ...newSlot, format: e.target.value })}
+                >
+                  <option value="image">Imagen</option>
+                  <option value="carousel">Carrusel</option>
+                  <option value="reel">Reel</option>
+                  <option value="story">Historia</option>
+                </select>
+                <select
+                  value={newSlot.funnel}
+                  onChange={(e) => setNewSlot({ ...newSlot, funnel: e.target.value })}
+                >
+                  <option value="TOFU">TOFU</option>
+                  <option value="MOFU">MOFU</option>
+                  <option value="BOFU">BOFU</option>
+                </select>
+                <button className="small" onClick={() => void onCreateSlot()}>
+                  Añadir
+                </button>
+                <button className="small secondary" onClick={() => setNewSlot(null)}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : null}
           <div className="actions">
             <button className="small" onClick={onPlanWeek} disabled={planning}>
               {planning ? 'Planificando…' : 'Planificar próxima semana'}
             </button>
+            {!newSlot && (
+              <button
+                className="small secondary"
+                onClick={() =>
+                  setNewSlot({
+                    date: new Date().toISOString().slice(0, 10),
+                    time: '11:00',
+                    format: 'image',
+                    funnel: 'TOFU',
+                    pillar: 'Educación',
+                    topic: '',
+                  })
+                }
+              >
+                Añadir publicación
+              </button>
+            )}
           </div>
         </section>
 

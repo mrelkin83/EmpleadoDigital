@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { runQualityGate, validateWeeklyMix } from '@empleado/content';
@@ -76,6 +77,45 @@ export function registerCalendarRoutes(app: FastifyInstance, ctx: AppContext): v
     });
 
     return reply.status(201).send({ weekStart, created, skipped: slots.length - created.length });
+  });
+
+  /** Crea un slot manual del calendario (CRUD completo de la vista). */
+  const slotCreateSchema = z
+    .object({
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      time: z.string().regex(/^\d{2}:\d{2}$/).default('11:00'),
+      format: z.enum(['reel', 'carousel', 'image', 'story', 'text']).default('image'),
+      pillar: z.string().min(1).max(80),
+      funnel: z.enum(['TOFU', 'MOFU', 'BOFU']).default('TOFU'),
+      topic: z.string().min(3).max(200),
+    })
+    .strict();
+
+  app.post('/api/calendar', async (request, reply) => {
+    const parsed = slotCreateSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'invalid_body', details: parsed.error.flatten() });
+    }
+    const objectives = {
+      TOFU: 'Alcance y descubrimiento de audiencia relevante',
+      MOFU: 'Educación y construcción de confianza',
+      BOFU: 'Generar consultas y conversaciones comerciales',
+    } as const;
+    const slot = {
+      id: randomUUID(),
+      tenantId: DEFAULT_TENANT_ID,
+      ...parsed.data,
+      objective: objectives[parsed.data.funnel],
+      channel: 'instagram' as const,
+      status: 'planned' as const,
+    };
+    await ctx.store.saveCalendarSlot(slot);
+    await ctx.logActivity({
+      actor: 'usuario',
+      kind: 'info',
+      summary: `Añadiste una publicación al calendario: "${slot.topic}" (${slot.date}).`,
+    });
+    return reply.status(201).send(slot);
   });
 
   /** Edita un slot: definir el tema (los "Por definir"), mover fecha/hora u omitirlo. */
