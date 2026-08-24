@@ -274,13 +274,17 @@ export default function Dashboard() {
     }
   }
 
-  async function onGenerateImage(pieceId: string) {
+  async function onGenerateImage(pieceId: string, mode?: 'ai' | 'template') {
     setBusyPiece(pieceId);
     setNotice(null);
     try {
-      const res = await fetch(`/api/content/${pieceId}/media/generate`, { method: 'POST' });
+      const res = await fetch(`/api/content/${pieceId}/media/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(mode ? { mode } : {}),
+      });
       const data = await res.json();
-      setNotice(res.ok ? 'Imagen de marca generada.' : `No se generó: ${data.message ?? data.error}`);
+      setNotice(res.ok ? 'Imagen generada.' : `No se generó: ${data.message ?? data.error}`);
       await refresh();
     } finally {
       setBusyPiece(null);
@@ -554,7 +558,14 @@ export default function Dashboard() {
                           disabled={busyPiece === p.id}
                           onClick={() => void onGenerateImage(p.id)}
                         >
-                          {p.media ? 'Regenerar imagen' : 'Generar imagen'}
+                          {busyPiece === p.id ? 'Generando…' : p.media ? 'Regenerar imagen IA' : 'Imagen IA'}
+                        </button>
+                        <button
+                          className="small secondary"
+                          disabled={busyPiece === p.id}
+                          onClick={() => void onGenerateImage(p.id, 'template')}
+                        >
+                          Plantilla
                         </button>
                         {(p.status === 'draft' || p.status === 'rejected') && (
                           <button

@@ -252,6 +252,13 @@ export function registerContentRoutes(app: FastifyInstance, ctx: AppContext): vo
    */
   app.post('/api/content/:id/media/generate', async (request, reply) => {
     const { id } = request.params as { id: string };
+    const parsedMode = z
+      .object({ mode: z.enum(['ai', 'template']).optional() })
+      .strict()
+      .safeParse(request.body ?? {});
+    if (!parsedMode.success) {
+      return reply.status(400).send({ error: 'invalid_body', details: parsedMode.error.flatten() });
+    }
     const piece = await ctx.store.getContent(DEFAULT_TENANT_ID, id);
     if (!piece) return reply.status(404).send({ error: 'not_found' });
     if (piece.status === 'published') {
@@ -260,8 +267,19 @@ export function registerContentRoutes(app: FastifyInstance, ctx: AppContext): vo
     const brand = await ctx.store.getBrand(DEFAULT_TENANT_ID);
     if (!brand) return reply.status(409).send({ error: 'brand_memory_missing' });
 
-    const { generateBrandImage } = await import('../pipeline/image-generator.js');
-    const generated = await generateBrandImage(brand, piece);
+    const { generateBrandImage, generateAiImage } = await import('../pipeline/image-generator.js');
+    const geminiKey = getEnv().GEMINI_API_KEY;
+    const mode = parsedMode.data.mode ?? (geminiKey ? 'ai' : 'template');
+
+    let generated;
+    if (mode === 'ai' && geminiKey) {
+      generated = await generateAiImage(geminiKey, brand, piece).catch(async (err) => {
+        request.log.warn({ err }, 'Imagen IA falló; usando plantilla de marca');
+        return generateBrandImage(brand, piece);
+      });
+    } else {
+      generated = await generateBrandImage(brand, piece);
+    }
 
     const previous = piece.media?.filename;
     const updated = {

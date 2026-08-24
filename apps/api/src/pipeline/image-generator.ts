@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import sharp from 'sharp';
 import type { BrandMemory } from '@empleado/brand';
+import { generateGeminiImage } from '@empleado/ai-providers';
+import { logger } from '@empleado/shared';
 import { UPLOADS_DIR } from '../server.js';
 
 /**
@@ -20,6 +22,37 @@ const MUTED = '#9db2c9';
 export interface GeneratedImage {
   filename: string;
   mime: 'image/jpeg';
+  /** Cómo se produjo: 'ai' (Gemini) o 'template' (plantilla determinista). */
+  source: 'ai' | 'template';
+}
+
+/**
+ * Imagen fotográfica con IA (Gemini). Sin texto dentro de la imagen — los
+ * modelos aún cometen erratas tipográficas y el copy ya vive en el caption.
+ * Si falla o no hay clave, el llamador cae a la plantilla.
+ */
+export async function generateAiImage(
+  apiKey: string,
+  brand: BrandMemory,
+  piece: { hook: string; topic: string; pillar: string },
+): Promise<GeneratedImage> {
+  const prompt = [
+    `Fotografía editorial profesional para Instagram (cuadrada 1:1) que ilustre: "${piece.topic}".`,
+    `Contexto del negocio: ${brand.niche} en ${brand.market}.`,
+    'Estilo: fotografía realista de alta calidad, iluminación natural, composición limpia con espacio negativo,',
+    'paleta sobria con azul marino profundo y acentos dorados. Ambiente de comercio exterior:',
+    'puertos, contenedores, documentos, aduanas u oficinas profesionales según corresponda al tema.',
+    'SIN texto, SIN letras, SIN logotipos, SIN marcas de agua dentro de la imagen.',
+  ].join(' ');
+
+  const { bytes } = await generateGeminiImage(apiKey, prompt);
+  const filename = `${randomUUID()}.jpg`;
+  await sharp(bytes)
+    .resize(1080, 1080, { fit: 'cover' })
+    .jpeg({ quality: 92 })
+    .toFile(path.join(UPLOADS_DIR, filename));
+  logger.info({ filename }, 'Imagen generada con Gemini');
+  return { filename, mime: 'image/jpeg', source: 'ai' };
 }
 
 export async function generateBrandImage(
@@ -48,7 +81,7 @@ export async function generateBrandImage(
 
   const filename = `${randomUUID()}.jpg`;
   await sharp(Buffer.from(svg)).jpeg({ quality: 92 }).toFile(path.join(UPLOADS_DIR, filename));
-  return { filename, mime: 'image/jpeg' };
+  return { filename, mime: 'image/jpeg', source: 'template' };
 }
 
 /** Corta el texto en líneas de máximo `maxChars`, hasta `maxLines` (elipsis al final). */

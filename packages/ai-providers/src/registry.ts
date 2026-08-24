@@ -1,6 +1,7 @@
 import { logger } from '@empleado/shared';
 import type { AIProvider } from '@empleado/ai-core';
 import { AnthropicProvider } from './anthropic.provider.js';
+import { GeminiProvider } from './gemini.provider.js';
 import { MockProvider } from './mock.provider.js';
 
 /**
@@ -14,6 +15,11 @@ export function buildProvidersFromEnv(env: NodeJS.ProcessEnv = process.env): AIP
 
   if (env['ANTHROPIC_API_KEY']) {
     providers.push(new AnthropicProvider(env['ANTHROPIC_API_KEY']));
+  }
+
+  // Gemini: segundo proveedor de texto (fallback) y titular de generación de imagen.
+  if (env['GEMINI_API_KEY']) {
+    providers.push(new GeminiProvider(env['GEMINI_API_KEY']));
   }
 
   if (providers.length === 0) {
