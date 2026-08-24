@@ -148,7 +148,7 @@ export async function generateGeminiVideo(
   prompt: string,
   options: { model?: string; aspectRatio?: '9:16' | '16:9'; timeoutMs?: number } = {},
 ): Promise<{ bytes: Buffer; mimeType: string }> {
-  const model = options.model ?? 'veo-3.0-fast-generate-001';
+  const model = options.model ?? 'veo-3.1-fast-generate-preview';
   const headers = { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey };
 
   const startRes = await fetch(`${API_BASE}/models/${model}:predictLongRunning`, {

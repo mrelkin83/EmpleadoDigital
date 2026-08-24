@@ -136,6 +136,33 @@ export function registerContentRoutes(app: FastifyInstance, ctx: AppContext): vo
   });
 
   /**
+   * Elimina una pieza no publicada, junto con su material en disco. Las
+   * publicadas se conservan: son historial y alimentan analytics.
+   */
+  app.delete('/api/content/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const piece = await ctx.store.getContent(DEFAULT_TENANT_ID, id);
+    if (!piece) return reply.status(404).send({ error: 'not_found' });
+    if (piece.status === 'published') {
+      return reply.status(409).send({
+        error: 'not_deletable',
+        message: 'Una pieza publicada no se elimina: es historial y alimenta las métricas.',
+      });
+    }
+    await ctx.store.deleteContent(DEFAULT_TENANT_ID, id);
+    const files = [piece.media?.filename, ...(piece.media?.items?.map((i) => i.filename) ?? [])];
+    for (const f of files) {
+      if (f) await unlink(path.join(UPLOADS_DIR, f)).catch(() => {});
+    }
+    await ctx.logActivity({
+      actor: 'usuario',
+      kind: 'info',
+      summary: `Eliminaste el borrador "${piece.hook || piece.topic}".`,
+    });
+    return { deleted: true };
+  });
+
+  /**
    * Sube el material (imagen o video) de una pieza. Reemplaza el anterior si existía.
    * El archivo queda en uploads/ y se sirve públicamente en /media/<filename> para
    * que la API de Instagram pueda descargarlo.

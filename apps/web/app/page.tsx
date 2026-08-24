@@ -321,13 +321,21 @@ export default function Dashboard() {
     await refresh();
   }
 
-  async function onSkipSlot(slotId: string) {
-    if (!confirm('¿Omitir esta publicación del plan? (no se borra, queda marcada como omitida)')) return;
-    await fetch(`/api/calendar/${slotId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'skipped' }),
-    });
+  async function onDeleteSlot(slotId: string) {
+    if (!confirm('¿Eliminar esta publicación del calendario?')) return;
+    await fetch(`/api/calendar/${slotId}`, { method: 'DELETE' });
+    await refresh();
+  }
+
+  async function onDeletePiece(pieceId: string) {
+    if (!confirm('¿Eliminar esta pieza y su material? Esta acción no se puede deshacer.')) return;
+    const res = await fetch(`/api/content/${pieceId}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const data = await res.json();
+      setNotice(`No se eliminó: ${data.message ?? data.error}`);
+    } else {
+      setNotice('Pieza eliminada.');
+    }
     await refresh();
   }
 
@@ -730,6 +738,13 @@ export default function Dashboard() {
                         {p.status === 'in_review' && (
                           <span className="muted">En revisión: apruébala arriba en &quot;Necesita tu aprobación&quot;.</span>
                         )}
+                        <button
+                          className="small danger"
+                          disabled={busyPiece === p.id}
+                          onClick={() => void onDeletePiece(p.id)}
+                        >
+                          Eliminar
+                        </button>
                       </div>
                     )}
                   </div>
@@ -799,8 +814,8 @@ export default function Dashboard() {
                       >
                         Editar
                       </button>
-                      <button className="small danger" onClick={() => void onSkipSlot(s.id)}>
-                        Omitir
+                      <button className="small danger" onClick={() => void onDeleteSlot(s.id)}>
+                        Eliminar
                       </button>
                     </div>
                   </>

@@ -118,6 +118,24 @@ export function registerCalendarRoutes(app: FastifyInstance, ctx: AppContext): v
     return reply.status(201).send(slot);
   });
 
+  /** Elimina un slot del calendario (no publicado). */
+  app.delete('/api/calendar/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const slots = await ctx.store.listCalendar(DEFAULT_TENANT_ID);
+    const slot = slots.find((s) => s.id === id);
+    if (!slot) return reply.status(404).send({ error: 'not_found' });
+    if (slot.status === 'published') {
+      return reply.status(409).send({ error: 'not_deletable', message: 'El slot ya fue publicado.' });
+    }
+    await ctx.store.deleteCalendarSlot(DEFAULT_TENANT_ID, id);
+    await ctx.logActivity({
+      actor: 'usuario',
+      kind: 'info',
+      summary: `Eliminaste del calendario: "${slot.topic}" (${slot.date}).`,
+    });
+    return { deleted: true };
+  });
+
   /** Edita un slot: definir el tema (los "Por definir"), mover fecha/hora u omitirlo. */
   app.patch('/api/calendar/:id', async (request, reply) => {
     const { id } = request.params as { id: string };

@@ -101,6 +101,18 @@ export class PgStore implements Store {
         updated_at = EXCLUDED.updated_at`;
   }
 
+  async deleteContent(tenantId: string, id: string): Promise<boolean> {
+    const result = await this.sql`
+      DELETE FROM content_pieces WHERE tenant_id = ${tenantId} AND id = ${id}`;
+    return result.count > 0;
+  }
+
+  async deleteCalendarSlot(tenantId: string, id: string): Promise<boolean> {
+    const result = await this.sql`
+      DELETE FROM calendar_slots WHERE tenant_id = ${tenantId} AND id = ${id}`;
+    return result.count > 0;
+  }
+
   async listActivity(tenantId: string, limit = 50): Promise<ActivityEntry[]> {
     const rows = await this.sql`
       SELECT * FROM activity_log WHERE tenant_id = ${tenantId} ORDER BY at DESC LIMIT ${limit}`;

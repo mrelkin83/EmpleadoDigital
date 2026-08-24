@@ -49,6 +49,12 @@ export class MemoryStore implements Store {
     this.content.set(piece.id, piece);
   }
 
+  async deleteContent(tenantId: string, id: string): Promise<boolean> {
+    const piece = this.content.get(id);
+    if (!piece || piece.tenantId !== tenantId) return false;
+    return this.content.delete(id);
+  }
+
   async listActivity(tenantId: string, limit = 50): Promise<ActivityEntry[]> {
     return this.activity
       .filter((a) => a.tenantId === tenantId)
@@ -85,6 +91,12 @@ export class MemoryStore implements Store {
 
   async saveCalendarSlot(slot: CalendarSlot): Promise<void> {
     this.calendar.set(slot.id, slot);
+  }
+
+  async deleteCalendarSlot(tenantId: string, id: string): Promise<boolean> {
+    const slot = this.calendar.get(id);
+    if (!slot || slot.tenantId !== tenantId) return false;
+    return this.calendar.delete(id);
   }
 
   async upsertLead(lead: Omit<Lead, 'id' | 'createdAt'>): Promise<void> {

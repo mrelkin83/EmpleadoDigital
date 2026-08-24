@@ -66,6 +66,7 @@ export interface Store {
   listContent(tenantId: string): Promise<ContentPiece[]>;
   getContent(tenantId: string, id: string): Promise<ContentPiece | null>;
   saveContent(piece: ContentPiece): Promise<void>;
+  deleteContent(tenantId: string, id: string): Promise<boolean>;
 
   listActivity(tenantId: string, limit?: number): Promise<ActivityEntry[]>;
   addActivity(entry: ActivityEntry): Promise<void>;
@@ -76,6 +77,7 @@ export interface Store {
 
   listCalendar(tenantId: string, fromDate?: string): Promise<CalendarSlot[]>;
   saveCalendarSlot(slot: CalendarSlot): Promise<void>;
+  deleteCalendarSlot(tenantId: string, id: string): Promise<boolean>;
 
   upsertLead(lead: Omit<Lead, 'id' | 'createdAt'>): Promise<void>;
   listLeads(tenantId: string): Promise<Lead[]>;
