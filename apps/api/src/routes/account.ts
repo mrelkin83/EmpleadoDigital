@@ -26,9 +26,14 @@ function sessionExpiry(): Date {
  */
 export function registerAccountRoutes(app: FastifyInstance, ctx: AppContext): void {
   // ¿Ya existe la cuenta admin? El login muestra "crear cuenta" o "iniciar sesión" según esto.
+  // emailHint: recordatorio de cuál correo usar (enmascarado) — single-admin, sin
+  // riesgo de privacidad (es la propia cuenta del dueño recordándosela a sí mismo).
   app.get('/api/account/status', async () => {
     const user = await ctx.store.getAnyUser(DEFAULT_TENANT_ID);
-    return { hasAccount: user !== null };
+    return {
+      hasAccount: user !== null,
+      ...(user ? { emailHint: maskEmail(user.email) } : {}),
+    };
   });
 
   const setupSchema = z
@@ -191,6 +196,15 @@ export function registerAccountRoutes(app: FastifyInstance, ctx: AppContext): vo
     });
     return { reset: true, recoveryCode: newRecoveryCode };
   });
+}
+
+/** "pedro@dominio.com" -> "pe***o@dominio.com" (recordatorio, no un correo completo). */
+function maskEmail(email: string): string {
+  const [local, domain] = email.split('@');
+  if (!local || !domain) return email;
+  const visible = local.length > 3 ? local.slice(0, 2) : local.slice(0, 1);
+  const tail = local.length > 3 ? local.slice(-1) : '';
+  return `${visible}${'*'.repeat(Math.max(local.length - visible.length - tail.length, 2))}${tail}@${domain}`;
 }
 
 async function startSession(ctx: AppContext, reply: FastifyReply, userId: string): Promise<void> {

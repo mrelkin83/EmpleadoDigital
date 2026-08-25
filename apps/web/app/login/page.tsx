@@ -13,6 +13,7 @@ function LoginForm() {
   const params = useSearchParams();
   const [checking, setChecking] = useState(true);
   const [hasAccount, setHasAccount] = useState(true);
+  const [emailHint, setEmailHint] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -22,7 +23,10 @@ function LoginForm() {
   useEffect(() => {
     fetch('/api/account/status')
       .then((r) => r.json())
-      .then((d) => setHasAccount(Boolean(d.hasAccount)))
+      .then((d) => {
+        setHasAccount(Boolean(d.hasAccount));
+        setEmailHint(d.emailHint ?? null);
+      })
       .catch(() => setError('No se pudo conectar con la API.'))
       .finally(() => setChecking(false));
   }, []);
@@ -132,6 +136,11 @@ function LoginForm() {
         <h1>{hasAccount ? 'Iniciar sesión' : 'Crear cuenta'}</h1>
       </header>
       <section className="card">
+        {hasAccount && emailHint && (
+          <p className="muted" style={{ marginBottom: 12 }}>
+            Cuenta registrada: <strong>{emailHint}</strong>
+          </p>
+        )}
         {!hasAccount && (
           <p className="muted" style={{ marginBottom: 12 }}>
             Primera vez aquí: crea la cuenta del panel. Al terminar verás un código de respaldo
