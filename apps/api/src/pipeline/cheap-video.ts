@@ -110,15 +110,27 @@ async function downloadClips(
   targetSeconds: number,
   workDir: string,
 ): Promise<string[]> {
-  const res = await fetch(
-    `${PEXELS_BASE}?query=${encodeURIComponent(query)}&orientation=portrait&size=medium&per_page=8`,
-    { headers: { Authorization: apiKey } },
-  );
-  if (!res.ok) {
-    throw new ProviderError(`Pexels API respondió ${res.status}`, { status: res.status });
-  }
-  const data = (await res.json()) as { videos?: PexelsVideo[] };
-  const videos = data.videos ?? [];
+  // El tema/pilar mapea a una consulta fija (pexelsQuery es determinista), así
+  // que sin variar página + orden acá, cada video con el mismo pilar pedía
+  // siempre el mismo top-N de Pexels y terminaba con el mismo clip de apoyo.
+  // Si la página al azar no tiene resultados (consultas angostas con pocos
+  // clips), se reintenta con la página 1 en vez de fallar la generación.
+  const fetchPage = async (page: number) => {
+    const res = await fetch(
+      `${PEXELS_BASE}?query=${encodeURIComponent(query)}&orientation=portrait&size=medium&per_page=12&page=${page}`,
+      { headers: { Authorization: apiKey } },
+    );
+    if (!res.ok) {
+      throw new ProviderError(`Pexels API respondió ${res.status}`, { status: res.status });
+    }
+    const data = (await res.json()) as { videos?: PexelsVideo[] };
+    return data.videos ?? [];
+  };
+
+  const page = 1 + Math.floor(Math.random() * 3);
+  let videos = await fetchPage(page);
+  if (videos.length === 0 && page !== 1) videos = await fetchPage(1);
+  videos = shuffle(videos);
   if (videos.length === 0) {
     throw new ProviderError('Pexels no encontró clips para la búsqueda', { query });
   }
@@ -139,6 +151,17 @@ async function downloadClips(
     throw new ProviderError('Ningún clip de Pexels tenía un archivo vertical descargable', { query });
   }
   return paths;
+}
+
+function shuffle<T>(arr: T[]): T[] {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = copy[i]!;
+    copy[i] = copy[j]!;
+    copy[j] = tmp;
+  }
+  return copy;
 }
 
 /** Prioriza el archivo vertical (9:16) de mejor calidad disponible. */
