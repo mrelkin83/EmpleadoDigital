@@ -20,6 +20,7 @@ const envSchema = z.object({
   WEB_BASE_URL: z.string().url().default('http://localhost:3000'),
   ANTHROPIC_API_KEY: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
+  PEXELS_API_KEY: z.string().optional(),
   AI_DAILY_BUDGET_USD: z.coerce.number().default(5),
 });
 

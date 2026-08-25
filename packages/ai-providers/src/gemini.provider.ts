@@ -139,6 +139,33 @@ interface VeoOperation {
 }
 
 /**
+ * Genera narración hablada con Gemini TTS (gemini-2.5-flash-preview-tts).
+ * Devuelve PCM crudo sin envolver: 24kHz, mono, 16 bits (formato documentado
+ * de la API; no trae mimeType fiable en la respuesta). Mucho más barato que
+ * Veo — es la base del "video económico" (voz + clips de stock + subtítulos).
+ */
+export async function generateGeminiSpeech(
+  apiKey: string,
+  text: string,
+  voiceName = 'Kore',
+): Promise<{ pcm: Buffer; sampleRate: number }> {
+  const data = await geminiRequest(apiKey, 'gemini-2.5-flash-preview-tts', {
+    contents: [{ parts: [{ text }] }],
+    generationConfig: {
+      responseModalities: ['AUDIO'],
+      speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } },
+    },
+  });
+  const inline = data.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+  if (!inline?.data) {
+    throw new ProviderError('Gemini TTS no devolvió audio', {
+      finishReason: data.candidates?.[0]?.finishReason,
+    });
+  }
+  return { pcm: Buffer.from(inline.data, 'base64'), sampleRate: 24000 };
+}
+
+/**
  * Genera un video corto con Veo (operación de larga duración: se sondea hasta
  * `done`). Requiere plan de pago en AI Studio — el tier gratuito devuelve un
  * error claro que el llamador muestra al usuario.

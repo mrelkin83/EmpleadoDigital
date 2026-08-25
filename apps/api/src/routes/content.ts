@@ -411,6 +411,55 @@ export function registerContentRoutes(app: FastifyInstance, ctx: AppContext): vo
   });
 
   /**
+   * Video económico (D33): voz de Gemini TTS + clips de stock de Pexels +
+   * subtítulos, en vez de generar video con IA. Rápido (segundos, no minutos)
+   * y sin coste de Veo; requiere GEMINI_API_KEY (ya usada en el resto) y
+   * PEXELS_API_KEY (gratis).
+   */
+  app.post('/api/content/:id/media/generate-video-cheap', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const piece = await ctx.store.getContent(DEFAULT_TENANT_ID, id);
+    if (!piece) return reply.status(404).send({ error: 'not_found' });
+    if (piece.status === 'published') {
+      return reply.status(409).send({ error: 'media_locked', message: 'La pieza ya fue publicada.' });
+    }
+    const brand = await ctx.store.getBrand(DEFAULT_TENANT_ID);
+    if (!brand) return reply.status(409).send({ error: 'brand_memory_missing' });
+    const env = getEnv();
+    if (!env.GEMINI_API_KEY || !env.PEXELS_API_KEY) {
+      return reply.status(409).send({
+        error: 'keys_missing',
+        message: 'Configura GEMINI_API_KEY y PEXELS_API_KEY (gratis en pexels.com/api) en el .env.',
+      });
+    }
+
+    const { generateCheapVideo } = await import('../pipeline/cheap-video.js');
+    try {
+      const generated = await generateCheapVideo(
+        { geminiApiKey: env.GEMINI_API_KEY, pexelsApiKey: env.PEXELS_API_KEY },
+        brand,
+        piece,
+      );
+      const previous = piece.media?.filename;
+      const updated = {
+        ...piece,
+        media: { filename: generated.filename, mime: generated.mime, kind: generated.kind },
+        updatedAt: new Date(),
+      };
+      await ctx.store.saveContent(updated);
+      if (previous && previous !== generated.filename) {
+        await unlink(path.join(UPLOADS_DIR, previous)).catch(() => {});
+      }
+      return reply.status(201).send({ piece: updated });
+    } catch (err) {
+      return reply.status(502).send({
+        error: 'video_generation_failed',
+        message: err instanceof Error ? err.message : 'error desconocido',
+      });
+    }
+  });
+
+  /**
    * Programa una pieza aprobada para publicación automática (spec §42: approved→scheduled).
    * Requiere material subido: a la hora programada no habrá humano para aportar la imagen.
    */

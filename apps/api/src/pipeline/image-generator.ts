@@ -286,7 +286,7 @@ export async function generateAiVideo(
  * como PNG transparente (misma técnica SVG que las imágenes) y se compone
  * con el filtro `overlay` de ffmpeg; nunca se le pide texto a la IA de video.
  */
-async function burnBrandOverlay(
+export async function burnBrandOverlay(
   inputPath: string,
   brand: BrandMemory,
   piece: { hook: string; topic: string; pillar: string },

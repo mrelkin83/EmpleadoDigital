@@ -290,6 +290,21 @@ export default function Dashboard() {
     }
   }
 
+  async function onGenerateVideoCheap(pieceId: string) {
+    setBusyPiece(pieceId);
+    setNotice('Generando video económico (voz + clips de stock)…');
+    try {
+      const res = await fetch(`/api/content/${pieceId}/media/generate-video-cheap`, { method: 'POST' });
+      const data = await res.json();
+      setNotice(res.ok ? 'Video generado y adjuntado (se publicará como reel).' : `No se generó: ${data.message ?? data.error}`);
+      await refresh();
+    } catch {
+      setNotice('Error generando el video.');
+    } finally {
+      setBusyPiece(null);
+    }
+  }
+
   async function onGenerateVideo(pieceId: string) {
     if (
       !confirm(
@@ -833,13 +848,22 @@ export default function Dashboard() {
                           </button>
                         )}
                         {p.format === 'reel' && (
-                          <button
-                            className="small secondary"
-                            disabled={busyPiece === p.id}
-                            onClick={() => void onGenerateVideo(p.id)}
-                          >
-                            Video IA (Veo)
-                          </button>
+                          <>
+                            <button
+                              className="small secondary"
+                              disabled={busyPiece === p.id}
+                              onClick={() => void onGenerateVideoCheap(p.id)}
+                            >
+                              Video económico
+                            </button>
+                            <button
+                              className="small secondary"
+                              disabled={busyPiece === p.id}
+                              onClick={() => void onGenerateVideo(p.id)}
+                            >
+                              Video IA (Veo)
+                            </button>
+                          </>
                         )}
                         {(p.status === 'draft' || p.status === 'rejected') && (
                           <button
