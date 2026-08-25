@@ -59,9 +59,11 @@ export async function buildRecommendations(ctx: AppContext): Promise<Recommendat
     });
   }
 
-  // 3. Calendario sin plan hacia adelante.
+  // 3. Calendario sin plan hacia adelante ("planificado" incluye slots que ya
+  //    tienen borrador o programación; solo los omitidos no cuentan).
+  const upcomingActive = calendar.filter((s) => s.status !== 'skipped');
   const plannedAhead = calendar.filter((s) => s.status === 'planned');
-  if (plannedAhead.length === 0) {
+  if (upcomingActive.length === 0) {
     recs.push({
       id: 'no-calendar',
       priority: 'media',

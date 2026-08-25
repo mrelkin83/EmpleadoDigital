@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 
@@ -79,9 +79,23 @@ interface Autonomy {
 }
 
 const MODE_LABELS: Record<Autonomy['mode'], string> = {
-  copilot: 'Copiloto — todo pasa por tu aprobación',
-  assisted: 'Asistido — apruebas lo que elijas abajo',
-  autonomous: 'Autónomo — publica y responde solo (salvo lo marcado)',
+  copilot: 'Copiloto: todo pasa por tu aprobación',
+  assisted: 'Asistido: apruebas lo que elijas abajo',
+  autonomous: 'Autónomo: publica y responde solo (salvo lo marcado)',
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  idea: 'idea',
+  draft: 'borrador',
+  in_review: 'en revisión',
+  approved: 'aprobada',
+  scheduled: 'programada',
+  published: 'publicada',
+  failed: 'fallida',
+  rejected: 'rechazada',
+  planned: 'planificada',
+  content_ready: 'con borrador',
+  skipped: 'omitida',
 };
 
 /** Acciones configurables de la matriz; el resto es 'never'/'always' y no se toca. */
@@ -504,7 +518,7 @@ export default function Dashboard() {
       {error && <div className="card" style={{ marginBottom: 16, color: 'var(--danger)' }}>{error}</div>}
 
       <div className="grid">
-        <section className="card">
+        <section className="card side-left">
           <h2>Necesita tu aprobación ({approvals.length})</h2>
           {approvals.length === 0 && <p className="empty">Nada pendiente. Todo al día.</p>}
           <ul className="plain">
@@ -525,7 +539,7 @@ export default function Dashboard() {
           </ul>
         </section>
 
-        <section className="card">
+        <section className="card side-left">
           <h2>Crear contenido</h2>
           <form className="gen" onSubmit={onGenerate}>
             <input name="topic" placeholder="Tema (ej. errores al importar desde China)" required minLength={3} />
@@ -552,7 +566,7 @@ export default function Dashboard() {
           </form>
         </section>
 
-        <section className="card">
+        <section className="card main">
           <h2>Contenido</h2>
           {notice && <p className="notice">{notice}</p>}
           {content.length === 0 && <p className="empty">Aún no hay piezas. Genera la primera.</p>}
@@ -573,7 +587,7 @@ export default function Dashboard() {
                     />
                   )}
                   <div className="piece-main">
-                    <span className={`badge ${p.status}`}>{p.status}</span>
+                    <span className={`badge ${p.status}`}>{STATUS_LABELS[p.status] ?? p.status}</span>
                     <button className="piece-title" onClick={() => toggleExpand(p)}>
                       {expanded === p.id ? '▾' : '▸'} {p.hook || p.topic}
                       <span className="muted" style={{ fontWeight: 400 }}>
@@ -583,12 +597,12 @@ export default function Dashboard() {
                     </button>
                     <div className="muted">
                       {p.format} · {p.pillar} · {p.funnel}
-                      {p.media?.kind === 'video' && <> · 🎬 video adjunto (se publica como reel)</>}
+                      {p.media?.kind === 'video' && <> · video adjunto (se publica como reel)</>}
                       {p.media?.kind === 'carousel' && (
-                        <> · 🖼 carrusel ({p.media.items?.length ?? 0} láminas)</>
+                        <> · carrusel de {p.media.items?.length ?? 0} láminas</>
                       )}
                       {p.status === 'scheduled' && p.scheduledAt && (
-                        <> · ⏰ {new Date(p.scheduledAt).toLocaleString('es-CO')}</>
+                        <> · sale el {new Date(p.scheduledAt).toLocaleString('es-CO')}</>
                       )}
                     </div>
 
@@ -811,7 +825,7 @@ export default function Dashboard() {
           </ul>
         </section>
 
-        <section className="card">
+        <section className="card side-right">
           <h2>Próximamente · Calendario</h2>
           {calendar.length === 0 && (
             <p className="empty">Sin publicaciones planificadas para los próximos días.</p>
@@ -950,7 +964,7 @@ export default function Dashboard() {
           </div>
         </section>
 
-        <section className="card">
+        <section className="card side-left">
           <h2>Recomendaciones del analista</h2>
           {recommendations.length === 0 && (
             <p className="empty">Sin recomendaciones: todo marcha según el plan.</p>
@@ -968,7 +982,7 @@ export default function Dashboard() {
           </ul>
         </section>
 
-        <section className="card">
+        <section className="card side-left">
           <h2>Autonomía del empleado</h2>
           {!autonomy && <p className="empty">Cargando…</p>}
           {autonomy && (
@@ -1018,7 +1032,7 @@ export default function Dashboard() {
           )}
         </section>
 
-        <section className="card">
+        <section className="card side-right">
           <h2>Rendimiento</h2>
           {!analytics?.connected && <p className="empty">Conecta Instagram para ver métricas.</p>}
           {analytics?.connected && analytics.posts.length === 0 && (
@@ -1056,7 +1070,7 @@ export default function Dashboard() {
           )}
         </section>
 
-        <section className="card">
+        <section className="card side-right">
           <h2>Bitácora del empleado</h2>
           {activity.length === 0 && <p className="empty">Sin actividad todavía.</p>}
           <ul className="plain">
