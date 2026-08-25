@@ -117,6 +117,18 @@ interface Slot {
   status: string;
 }
 
+/** Traduce la respuesta de error de la API a texto legible, incluyendo el detalle de validación por campo si viene (invalid_body). */
+function describeError(data: { message?: string; error?: string; details?: { fieldErrors?: Record<string, string[]> } }): string {
+  const fieldErrors = data.details?.fieldErrors;
+  if (fieldErrors) {
+    const entries = Object.entries(fieldErrors).filter(([, msgs]) => msgs?.length);
+    if (entries.length) {
+      return entries.map(([field, msgs]) => `${field}: ${msgs.join(', ')}`).join(' · ');
+    }
+  }
+  return data.message ?? data.error ?? 'error desconocido';
+}
+
 export default function Dashboard() {
   const [health, setHealth] = useState<Health | null>(null);
   const [approvals, setApprovals] = useState<Approval[]>([]);
@@ -171,10 +183,12 @@ export default function Dashboard() {
 
   async function onGenerate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const form = new FormData(e.currentTarget);
+    const formEl = e.currentTarget;
+    const form = new FormData(formEl);
     setGenerating(true);
+    setNotice('Generando borrador…');
     try {
-      await fetch('/api/content/generate', {
+      const res = await fetch('/api/content/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -184,7 +198,12 @@ export default function Dashboard() {
           format: form.get('format'),
         }),
       });
+      const data = await res.json();
+      setNotice(res.ok ? 'Borrador generado ✓' : `No se generó: ${describeError(data)}`);
+      if (res.ok) formEl.reset();
       await refresh();
+    } catch {
+      setNotice('Error generando el borrador.');
     } finally {
       setGenerating(false);
     }
@@ -241,7 +260,7 @@ export default function Dashboard() {
         setGateFails((g) => ({ ...g, [pieceId]: failed }));
         setNotice(failed.length ? 'Guardado; revisa los puntos del control de calidad.' : 'Guardado ✓');
       } else {
-        setNotice(`No se guardó: ${data.message ?? data.error}`);
+        setNotice(`No se guardó: ${describeError(data)}`);
       }
       await refresh();
     } finally {
@@ -265,7 +284,7 @@ export default function Dashboard() {
         setGateFails((g) => ({ ...g, [pieceId]: failed }));
         setNotice('El control de calidad detuvo la pieza; corrige lo señalado.');
       } else {
-        setNotice(`No se pudo enviar: ${data.message ?? data.error}`);
+        setNotice(`No se pudo enviar: ${describeError(data)}`);
       }
       await refresh();
     } finally {
@@ -282,7 +301,7 @@ export default function Dashboard() {
       setNotice(
         res.ok
           ? `Carrusel generado: ${data.slides} láminas.`
-          : `No se generó: ${data.message ?? data.error}`,
+          : `No se generó: ${describeError(data)}`,
       );
       await refresh();
     } finally {
@@ -296,7 +315,7 @@ export default function Dashboard() {
     try {
       const res = await fetch(`/api/content/${pieceId}/media/generate-video-cheap`, { method: 'POST' });
       const data = await res.json();
-      setNotice(res.ok ? 'Video generado y adjuntado (se publicará como reel).' : `No se generó: ${data.message ?? data.error}`);
+      setNotice(res.ok ? 'Video generado y adjuntado (se publicará como reel).' : `No se generó: ${describeError(data)}`);
       await refresh();
     } catch {
       setNotice('Error generando el video.');
@@ -317,7 +336,7 @@ export default function Dashboard() {
     try {
       const res = await fetch(`/api/content/${pieceId}/media/generate-video`, { method: 'POST' });
       const data = await res.json();
-      setNotice(res.ok ? 'Video generado y adjuntado (se publicará como reel).' : `No se generó: ${data.message ?? data.error}`);
+      setNotice(res.ok ? 'Video generado y adjuntado (se publicará como reel).' : `No se generó: ${describeError(data)}`);
       await refresh();
     } catch {
       setNotice('Error generando el video.');
@@ -334,7 +353,7 @@ export default function Dashboard() {
     });
     if (!res.ok) {
       const data = await res.json();
-      setNotice(`No se guardó el slot: ${data.message ?? data.error}`);
+      setNotice(`No se guardó el slot: ${describeError(data)}`);
     }
     setEditSlot(null);
     await refresh();
@@ -351,7 +370,7 @@ export default function Dashboard() {
     const res = await fetch(`/api/content/${pieceId}`, { method: 'DELETE' });
     if (!res.ok) {
       const data = await res.json();
-      setNotice(`No se eliminó: ${data.message ?? data.error}`);
+      setNotice(`No se eliminó: ${describeError(data)}`);
     } else {
       setNotice('Pieza eliminada.');
     }
@@ -372,7 +391,7 @@ export default function Dashboard() {
       setNewSlot(null);
     } else {
       const data = await res.json();
-      setNotice(`No se creó: ${data.message ?? data.error}`);
+      setNotice(`No se creó: ${describeError(data)}`);
     }
     await refresh();
   }
@@ -399,7 +418,7 @@ export default function Dashboard() {
         body: JSON.stringify(mode ? { mode } : {}),
       });
       const data = await res.json();
-      setNotice(res.ok ? 'Imagen generada.' : `No se generó: ${data.message ?? data.error}`);
+      setNotice(res.ok ? 'Imagen generada.' : `No se generó: ${describeError(data)}`);
       await refresh();
     } finally {
       setBusyPiece(null);
@@ -420,7 +439,7 @@ export default function Dashboard() {
         body: JSON.stringify({ scheduledAt: new Date(value).toISOString() }),
       });
       const data = await res.json();
-      setNotice(res.ok ? 'Pieza programada.' : `No se programó: ${data.message ?? data.error}`);
+      setNotice(res.ok ? 'Pieza programada.' : `No se programó: ${describeError(data)}`);
       await refresh();
     } finally {
       setBusyPiece(null);
@@ -463,7 +482,7 @@ export default function Dashboard() {
       setNotice(
         res.ok
           ? `Material subido (${file.name}).`
-          : `No se pudo subir: ${data.message ?? data.error}`,
+          : `No se pudo subir: ${describeError(data)}`,
       );
       await refresh();
     } catch {
@@ -493,7 +512,7 @@ export default function Dashboard() {
         setGateFails((g) => ({ ...g, [pieceId]: failed }));
         setNotice('El control de calidad detuvo la publicación; corrige lo señalado.');
       } else {
-        setNotice(`No se publicó: ${data.message ?? data.error}`);
+        setNotice(`No se publicó: ${describeError(data)}`);
       }
       await refresh();
     } catch {
@@ -556,7 +575,14 @@ export default function Dashboard() {
 <section className="card">
           <h2>Crear contenido</h2>
           <form className="gen" onSubmit={onGenerate}>
-            <input name="topic" placeholder="Tema (ej. errores al importar desde China)" required minLength={3} />
+            <input
+              name="topic"
+              placeholder="Tema breve (ej. errores al importar desde China) — no pegues el post completo"
+              required
+              minLength={3}
+              maxLength={200}
+              title="Un tema corto para que la IA redacte el contenido; no el texto completo del post"
+            />
             <select name="pillar" defaultValue="Educación">
               {['Educación', 'Prevención', 'Errores frecuentes', 'Casos', 'Actualidad', 'Preguntas frecuentes', 'Mitos', 'Consejos prácticos', 'Autoridad profesional', 'Conversión'].map((p) => (
                 <option key={p}>{p}</option>

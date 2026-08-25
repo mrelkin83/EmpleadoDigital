@@ -38,6 +38,7 @@ interface Brand {
     website?: string;
     email?: string;
     phoneDisplay?: string;
+    address?: string;
   };
   visual?: { primaryColor?: string; accentColor?: string; logoFilename?: string };
 }
@@ -151,6 +152,9 @@ export default function BrandPage() {
             : {}),
           ...(String(form.get('phoneDisplay') ?? '').trim()
             ? { phoneDisplay: String(form.get('phoneDisplay')).trim() }
+            : {}),
+          ...(String(form.get('address') ?? '').trim()
+            ? { address: String(form.get('address')).trim() }
             : {}),
         },
         visual: {
@@ -297,6 +301,10 @@ export default function BrandPage() {
         <label>
           Teléfono para mostrar (aparece en las piezas gráficas)
           <input name="phoneDisplay" defaultValue={brand.contact?.phoneDisplay ?? ''} maxLength={40} placeholder="+57 300 123 4567" />
+        </label>
+        <label>
+          Dirección (aparece en las piezas gráficas, opcional)
+          <input name="address" defaultValue={brand.contact?.address ?? ''} maxLength={200} placeholder="Dir. Zona Franca Bogotá" />
         </label>
         <div className="actions">
           <label className="field">

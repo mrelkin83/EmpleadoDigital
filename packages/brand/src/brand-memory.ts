@@ -38,6 +38,8 @@ export interface BrandMemory {
     website?: string;
     email?: string;
     phoneDisplay?: string;
+    /** Dirección física, si la marca quiere mostrarla en las piezas gráficas. */
+    address?: string;
   };
   /** Identidad visual para las piezas generadas (colores hex y logo subido). */
   visual?: { primaryColor?: string; accentColor?: string; logoFilename?: string };

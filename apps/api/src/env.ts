@@ -17,7 +17,7 @@ const envSchema = z.object({
   INSTAGRAM_APP_SECRET: z.string().optional(),
   OAUTH_REDIRECT_URI: z.string().url().optional(),
   TOKEN_ENCRYPTION_KEY: z.string().length(64).optional(),
-  WEB_BASE_URL: z.string().url().default('http://localhost:3000'),
+  WEB_BASE_URL: z.string().url().default('http://localhost:3010'),
   ANTHROPIC_API_KEY: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   PEXELS_API_KEY: z.string().optional(),

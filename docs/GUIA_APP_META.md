@@ -100,7 +100,7 @@ INSTAGRAM_APP_SECRET=<paso 3>
 META_APP_SECRET=<paso 3>
 META_VERIFY_TOKEN=<paso 5>
 OAUTH_REDIRECT_URI=https://TU-SUBDOMINIO.ngrok-free.app/auth/instagram/callback
-WEB_BASE_URL=http://localhost:3000
+WEB_BASE_URL=http://localhost:3010
 TOKEN_ENCRYPTION_KEY=<generar una vez y NO perderla>
 ```
 
@@ -110,7 +110,7 @@ Generar la clave de cifrado:
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-Reinicia la API (`npm run dev:api`), abre el dashboard (`npm run dev:web` → http://localhost:3000) y pulsa **Conectar Instagram**. Inicia sesión con la cuenta profesional y acepta los 4 permisos.
+Reinicia la API (`npm run dev:api`), abre el dashboard (`npm run dev:web` → http://localhost:3010) y pulsa **Conectar Instagram**. Inicia sesión con la cuenta profesional y acepta los 4 permisos.
 
 > Durante el callback aparecerá **una página de aviso de ngrok** ("You are about to visit..."): es el interstitial del plan gratuito, no un error. Pulsa **Visit Site** y el flujo continúa; solo sale una vez por navegador y no afecta a los webhooks (servidor-a-servidor). Al final vuelves al dashboard con `?connect=ok`.
 

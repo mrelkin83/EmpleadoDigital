@@ -61,6 +61,7 @@ export function registerMiscRoutes(app: FastifyInstance, ctx: AppContext): void 
           website: z.string().max(200).optional(),
           email: z.string().max(200).optional(),
           phoneDisplay: z.string().max(40).optional(),
+          address: z.string().max(200).optional(),
         })
         .optional(),
       visual: z

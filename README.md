@@ -33,7 +33,7 @@ docker compose up -d
 npm run db:migrate
 
 npm run dev:api               # API en http://127.0.0.1:3001
-npm run dev:web               # Dashboard en http://localhost:3000
+npm run dev:web               # Dashboard en http://localhost:3010
 npm run dev:worker            # Worker (requiere DATABASE_URL)
 ```
 

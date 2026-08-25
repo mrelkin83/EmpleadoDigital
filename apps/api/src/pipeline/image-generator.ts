@@ -37,11 +37,41 @@ function darken(hex: string, factor: number): string {
   return `#${n(1)}${n(3)}${n(5)}`;
 }
 
+/** Datos de contacto configurados, en orden de aparición. */
+function contactParts(brand: BrandMemory): string[] {
+  return [brand.contact?.website, brand.contact?.phoneDisplay, brand.contact?.email, brand.contact?.address].filter(
+    (v): v is string => Boolean(v?.trim()),
+  );
+}
+
+const CONTACT_SEP = '  ·  ';
+
 /** Línea de contacto para la franja inferior: solo los datos configurados. */
 function contactLine(brand: BrandMemory): string {
-  return [brand.contact?.website, brand.contact?.phoneDisplay, brand.contact?.email]
-    .filter((v): v is string => Boolean(v?.trim()))
-    .join('   ·   ');
+  return contactParts(brand).join(CONTACT_SEP);
+}
+
+/**
+ * Reparte los datos de contacto en tantas líneas como quepan en el ancho dado
+ * — nunca descarta datos (antes se recortaba a 2 líneas y una dirección larga
+ * podía desaparecer silenciosamente). El tamaño de letra se ajusta aparte, en
+ * footerSvg, para mantener el número de líneas bajo control.
+ */
+function wrapContactLines(brand: BrandMemory, availableWidth: number, fontSize: number): string[] {
+  const maxChars = Math.floor(availableWidth / (fontSize * 0.55));
+  const lines: string[] = [];
+  let current = '';
+  for (const part of contactParts(brand)) {
+    const candidate = current ? `${current}${CONTACT_SEP}${part}` : part;
+    if (candidate.length > maxChars && current) {
+      lines.push(current);
+      current = part;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
 }
 
 /**
@@ -83,19 +113,55 @@ function iconSvg(name: string, x: number, y: number, size: number, color: string
   return `<g transform="translate(${x},${y}) scale(${size / 100})" fill="none" stroke="${color}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}">${inner}</g>`;
 }
 
-/** Fondo con degradado + trazos decorativos sutiles, común a todas las plantillas. */
+/** Icono dentro de una insignia circular (aro + fondo sutil) — trato "sello" en vez de trazo suelto. */
+function iconBadge(name: string, cx: number, cy: number, r: number, pal: Palette): string {
+  const size = r * 1.3;
+  return `
+  <circle cx="${cx}" cy="${cy}" r="${r}" fill="${pal.bgDark}" opacity="0.55"/>
+  <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${pal.accent}" stroke-width="2" opacity="0.6"/>
+  ${iconSvg(name, cx - size / 2, cy - size / 2, size, pal.accent, 0.92)}`;
+}
+
+/** Etiqueta ("tag") del pilar: cápsula con borde y punto de acento, en vez de texto suelto. */
+function pillarBadge(pal: Palette, label: string, x: number, y: number): string {
+  const upper = label.toUpperCase();
+  const w = Math.round(64 + upper.length * 17.5);
+  return `
+  <rect x="${x}" y="${y}" width="${w}" height="44" rx="22" fill="${pal.accent}" opacity="0.14"/>
+  <rect x="${x}" y="${y}" width="${w}" height="44" rx="22" fill="none" stroke="${pal.accent}" stroke-width="1.3" opacity="0.55"/>
+  <circle cx="${x + 22}" cy="${y + 22}" r="4" fill="${pal.accent}"/>
+  <text x="${x + 38}" y="${y + 29}" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="${pal.accent}" letter-spacing="2.5">${escapeXml(upper)}</text>`;
+}
+
+/**
+ * Fondo premium común a todas las plantillas: degradado en tres tonos, cuña
+ * diagonal geométrica, textura de puntos y marco fino — reemplaza el fondo
+ * plano anterior (una sola gradiente + dos círculos) por composición editorial.
+ */
 function baseBackground(pal: Palette): string {
+  const wedgeX = Math.round(W * 0.52);
+  const wedgeY = Math.round(H * 0.58);
+  const dotsX = Math.round(W * 0.58);
   return `
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0.6" y2="1">
+    <linearGradient id="bg" x1="0" y1="0" x2="0.7" y2="1">
       <stop offset="0" stop-color="${pal.bg}"/>
-      <stop offset="1" stop-color="${pal.bgDark}"/>
+      <stop offset="0.55" stop-color="${pal.bgDark}"/>
+      <stop offset="1" stop-color="${darken(pal.bgDark, 0.28)}"/>
     </linearGradient>
+    <pattern id="dots" width="28" height="28" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.5" fill="${pal.accent}" opacity="0.45"/>
+    </pattern>
   </defs>
   <rect width="${W}" height="${H}" fill="url(#bg)"/>
-  <circle cx="${W - 60}" cy="120" r="220" fill="${pal.accent}" opacity="0.06"/>
-  <circle cx="${W - 60}" cy="120" r="140" fill="${pal.accent}" opacity="0.05"/>
-  <rect x="0" y="${H - 150}" width="${W}" height="2" fill="${pal.accent}" opacity="0.35"/>`;
+  <path d="M ${wedgeX} 0 L ${W} 0 L ${W} ${wedgeY} Z" fill="${pal.accent}" opacity="0.05"/>
+  <line x1="${wedgeX}" y1="0" x2="${W}" y2="${wedgeY}" stroke="${pal.accent}" stroke-width="1" opacity="0.22"/>
+  <rect x="${dotsX}" y="0" width="${W - dotsX}" height="${H - 150}" fill="url(#dots)"/>
+  <circle cx="${W - 40}" cy="100" r="240" fill="${pal.accent}" opacity="0.05"/>
+  <circle cx="${W - 40}" cy="100" r="150" fill="${pal.accent}" opacity="0.045"/>
+  <rect x="0" y="${H - 150}" width="${W}" height="1" fill="${pal.accent}" opacity="0.15"/>
+  <rect x="0" y="${H - 148}" width="${W}" height="2" fill="${pal.accent}" opacity="0.4"/>
+  <rect x="24" y="24" width="${W - 48}" height="${H - 48}" fill="none" stroke="${pal.accent}" stroke-width="1.5" opacity="0.3"/>`;
 }
 
 /**
@@ -108,25 +174,51 @@ function hookBannerSvg(brand: BrandMemory, pal: Palette, pillar: string, hook: s
   const lines = wrap(hook, Math.round(w / 42), 4);
   const fontSize = lines.length <= 2 ? 52 : lines.length === 3 ? 44 : 38;
   const lineHeight = Math.round(fontSize * 1.25);
-  const bannerHeight = 100 + lines.length * lineHeight;
+  const badgeY = 26;
+  const textTop = 154;
+  const bannerHeight = 158 + lines.length * lineHeight;
   return `
-  <rect x="0" y="0" width="${w}" height="${bannerHeight}" fill="${pal.bgDark}" opacity="0.85"/>
+  <defs>
+    <linearGradient id="scrim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${pal.bgDark}" stop-opacity="0.92"/>
+      <stop offset="1" stop-color="${pal.bgDark}" stop-opacity="0.8"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="${w}" height="${bannerHeight}" fill="url(#scrim)"/>
   <rect x="0" y="${bannerHeight}" width="${w}" height="3" fill="${pal.accent}"/>
-  <text x="60" y="56" font-family="Arial, sans-serif" font-size="26" font-weight="bold" fill="${pal.accent}" letter-spacing="3">${escapeXml(pillar.toUpperCase())}</text>
+  ${pillarBadge(pal, pillar, 48, badgeY)}
   ${lines
     .map(
       (line, i) =>
-        `<text x="60" y="${96 + i * lineHeight}" font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="bold" fill="${pal.text}">${escapeXml(line)}</text>`,
+        `<text x="60" y="${textTop + i * lineHeight}" font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="bold" fill="${pal.text}">${escapeXml(line)}</text>`,
     )
     .join('\n  ')}`;
 }
 
 /** Franja inferior de marca: nombre + datos de contacto (+ indicador opcional). */
 function footerSvg(brand: BrandMemory, pal: Palette, rightText?: string, w = W, h = H): string {
-  const contacts = contactLine(brand);
+  const available = w - 178;
+  // Se prueban tamaños decrecientes hasta que el contacto entra en pocas
+  // líneas; con muchos datos configurados (web+tel+correo+dirección) puede
+  // necesitar 3 líneas, pero nunca se recorta información.
+  let fontSize = 24;
+  let contactLines = wrapContactLines(brand, available, fontSize);
+  for (const size of [21, 18, 16]) {
+    if (contactLines.length <= 2) break;
+    fontSize = size;
+    contactLines = wrapContactLines(brand, available, fontSize);
+  }
+  const lineGap = fontSize + (fontSize >= 22 ? 12 : 8);
+  const brandY = contactLines.length > 2 ? h - 124 : contactLines.length > 1 ? h - 108 : h - 92;
   return `
-  <text x="80" y="${h - 92}" font-family="Arial, sans-serif" font-size="36" font-weight="bold" fill="${pal.accent}" letter-spacing="0.5">${escapeXml(brand.brandName)}</text>
-  ${contacts ? `<text x="80" y="${h - 44}" font-family="Arial, sans-serif" font-size="26" fill="${pal.muted}">${escapeXml(contacts)}</text>` : ''}
+  <rect x="80" y="${brandY - 26}" width="6" height="30" fill="${pal.accent}"/>
+  <text x="98" y="${brandY}" font-family="Arial, sans-serif" font-size="36" font-weight="bold" fill="${pal.accent}" letter-spacing="0.5">${escapeXml(brand.brandName)}</text>
+  ${contactLines
+    .map(
+      (line, i) =>
+        `<text x="98" y="${brandY + 34 + i * lineGap}" font-family="Arial, sans-serif" font-size="${fontSize}" fill="${pal.muted}">${escapeXml(line)}</text>`,
+    )
+    .join('\n  ')}
   ${rightText ? `<text x="${w - 80}" y="${h - 44}" text-anchor="end" font-family="Arial, sans-serif" font-size="30" fill="${pal.muted}">${escapeXml(rightText)}</text>` : ''}`;
 }
 
@@ -139,12 +231,12 @@ async function composeWithLogo(
   if (!logoFile) return pipeline;
   try {
     const logo = await sharp(path.join(UPLOADS_DIR, logoFile))
-      .resize({ height: 96, fit: 'inside' })
+      .resize({ height: 150, fit: 'inside' })
       .png()
       .toBuffer();
     const meta = await sharp(logo).metadata();
     return sharp(await pipeline.toBuffer()).composite([
-      { input: logo, top: 64, left: W - 64 - (meta.width ?? 96) },
+      { input: logo, top: 48, left: W - 48 - (meta.width ?? 150) },
     ]);
   } catch (err) {
     logger.warn({ err, logoFile }, 'No se pudo estampar el logo; se continúa sin él');
@@ -218,19 +310,22 @@ export async function generateBrandImage(
   const lines = wrap(headline, 22, 7);
   const fontSize = lines.length <= 3 ? 76 : lines.length <= 5 ? 64 : 52;
   const lineHeight = Math.round(fontSize * 1.22);
-  const blockHeight = lines.length * lineHeight;
-  const startY = Math.round((H - 150 - blockHeight) / 2 + fontSize * 0.8);
+
+  const badgeY = 90;
+  const headlineTop = badgeY + 44 + 66;
+  const startY = headlineTop + Math.round(fontSize * 0.85);
 
   const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
   ${baseBackground(pal)}
-  <text x="80" y="${startY - fontSize - 56}" font-family="Arial, sans-serif" font-size="30" font-weight="bold" fill="${pal.accent}" letter-spacing="4">${escapeXml(piece.pillar.toUpperCase())}</text>
-  <rect x="80" y="${startY - fontSize - 36}" width="140" height="8" fill="${pal.accent}"/>
-  ${iconSvg(pickIcon(headline), W - 280, H - 380, 180, pal.accent, 0.35)}
+  <text x="60" y="${headlineTop + 260}" font-family="Georgia, 'Times New Roman', serif" font-size="380" font-weight="bold" fill="${pal.accent}" opacity="0.05">&#8220;</text>
+  ${pillarBadge(pal, piece.pillar, 80, badgeY)}
+  ${iconBadge(pickIcon(headline), W - 190, H - 400, 85, pal)}
   ${lines
-    .map(
-      (line, i) =>
-        `<text x="80" y="${startY + i * lineHeight}" font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="bold" fill="${pal.text}">${escapeXml(line)}</text>`,
-    )
+    .map((line, i) => {
+      // La última línea remata el titular en dorado: el "golpe" de la frase.
+      const isLast = i === lines.length - 1;
+      return `<text x="80" y="${startY + i * lineHeight}" font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="bold" fill="${isLast ? pal.accent : pal.text}">${escapeXml(line)}</text>`;
+    })
     .join('\n  ')}
   ${footerSvg(brand, pal)}
 </svg>`;
@@ -410,14 +505,15 @@ async function renderTextSlide(
 
   const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
   ${baseBackground(pal)}
+  <circle cx="148" cy="200" r="98" fill="none" stroke="${pal.accent}" stroke-width="1.5" opacity="0.35"/>
   <text x="80" y="250" font-family="Arial, sans-serif" font-size="140" font-weight="bold" fill="${pal.accent}" opacity="0.95">${index}</text>
   <rect x="80" y="290" width="140" height="8" fill="${pal.accent}"/>
-  ${iconSvg(pickIcon(text), W - 260, 120, 160, pal.accent, 0.9)}
+  ${iconBadge(pickIcon(text), W - 190, H - 280, 75, pal)}
   ${lines
-    .map(
-      (line, i) =>
-        `<text x="80" y="${startY + i * lineHeight}" font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="bold" fill="${pal.text}">${escapeXml(line)}</text>`,
-    )
+    .map((line, i) => {
+      const isLast = i === lines.length - 1;
+      return `<text x="80" y="${startY + i * lineHeight}" font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="bold" fill="${isLast ? pal.accent : pal.text}">${escapeXml(line)}</text>`;
+    })
     .join('\n  ')}
   ${footerSvg(brand, pal, `${index} / ${total}`)}
 </svg>`;
@@ -440,20 +536,22 @@ async function renderCtaSlide(brand: BrandMemory): Promise<{ filename: string; m
     brand.contact?.email ? { icon: 'mail', text: brand.contact.email } : null,
   ].filter((r): r is { icon: string; text: string } => r !== null);
 
+  const rowsTop = 440;
+  const rowGap = 96;
   const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
   ${baseBackground(pal)}
-  <text x="80" y="330" font-family="Arial, sans-serif" font-size="30" font-weight="bold" fill="${pal.accent}" letter-spacing="4">HABLEMOS DE TU CASO</text>
-  <rect x="80" y="352" width="140" height="8" fill="${pal.accent}"/>
-  <text x="80" y="450" font-family="Arial, sans-serif" font-size="64" font-weight="bold" fill="${pal.text}">¿Necesitas ayuda</text>
-  <text x="80" y="530" font-family="Arial, sans-serif" font-size="64" font-weight="bold" fill="${pal.text}">con tu importación?</text>
+  ${pillarBadge(pal, 'Hablemos de tu caso', 80, 90)}
+  <text x="80" y="284" font-family="Arial, sans-serif" font-size="64" font-weight="bold" fill="${pal.text}">¿Necesitas ayuda</text>
+  <text x="80" y="362" font-family="Arial, sans-serif" font-size="64" font-weight="bold" fill="${pal.accent}">con tu importación?</text>
   ${rows
-    .map(
-      (row, i) =>
-        `${iconSvg(row.icon, 80, 610 + i * 70, 44, pal.accent)}
-  <text x="144" y="${642 + i * 70}" font-family="Arial, sans-serif" font-size="38" fill="${pal.text}">${escapeXml(row.text)}</text>`,
-    )
+    .map((row, i) => {
+      const y = rowsTop + i * rowGap;
+      return `<rect x="80" y="${y}" width="${W - 160}" height="76" rx="16" fill="${pal.accent}" opacity="0.08"/>
+  ${iconBadge(row.icon, 128, y + 38, 34, pal)}
+  <text x="188" y="${y + 48}" font-family="Arial, sans-serif" font-size="34" fill="${pal.text}">${escapeXml(row.text)}</text>`;
+    })
     .join('\n  ')}
-  <text x="80" y="${640 + rows.length * 70 + 24}" font-family="Arial, sans-serif" font-size="30" fill="${pal.muted}">Escríbenos por DM y te orientamos.</text>
+  <text x="80" y="${rowsTop + rows.length * rowGap + 50}" font-family="Arial, sans-serif" font-size="28" fill="${pal.muted}">Escríbenos por DM y te orientamos.</text>
   ${footerSvg(brand, pal)}
 </svg>`;
 
