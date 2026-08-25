@@ -11,7 +11,7 @@ Documento rector: `SYSTEM_PROMPT_MAESTRO_AI_MARKETING_EMPLOYEE_V2_CONSOLIDADO.md
 |---|---|---|
 | 0 — Fundación | ✅ Completa | Monorepo TS strict, PostgreSQL (8 migraciones), CI, 76 tests + lint + typecheck, rate limiting. Login del dashboard: fase de despliegue |
 | 1 — Instagram MVP | ✅ Completa | OAuth real (5 permisos, token 60 días con refresh), publicación oficial verificada (post real + permalink), material propio, analytics con insights reales, IA real (claude-opus-5) |
-| 2 — Empleado Digital | ✅ Construida | Orquestador (calendario→borradores→scheduler cada 60s), agentes, skills, recomendaciones, bitácora, autonomía persistente. Falta validación E2E de la publicación programada (rodaje) |
+| 2 — Empleado Digital | ✅ **Completa y validada** | Orquestador, agentes, skills, recomendaciones, bitácora, autonomía persistente. Validación E2E 2026-08-24: primera publicación programada salió sola (reel con video Veo, scheduler del orquestador) |
 | 3 — Community Manager | ✅ Código completo · ⏸️ bloqueada por Meta | Pipelines de comentarios y DMs (clasificación→leads→escalamiento→respuesta con políticas), poller de comentarios, reglas de keywords con editor. Meta no entrega eventos ni contenido de comentarios hasta publicar la app |
 | 4 — Multimedia | ✅ Completa | Subida de imagen/video, publicación de reels, generador de imágenes de marca (plantilla sharp, un clic), variantes de copy |
 | 5 — Inteligencia | ✅ Núcleo operando | Ranking determinista de pilares (interacciones reales + feedback neto), planificación optimizada por rendimiento, recomendaciones proactivas, aprendizaje de motivos de rechazo. Experimentos A/B: pospuestos hasta tener volumen |
