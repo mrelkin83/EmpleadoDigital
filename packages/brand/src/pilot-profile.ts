@@ -7,7 +7,7 @@ import type { BrandMemory } from './brand-memory.js';
 export function buildPilotBrandMemory(tenantId: string): BrandMemory {
   return {
     tenantId,
-    brandName: 'Asesoría Aduanera (piloto)',
+    brandName: 'Asesoría Aduanera',
     description:
       'Profesional colombiano especializado en derecho aduanero, comercio exterior, importaciones y procesos ante la DIAN.',
     sector: 'Servicios jurídicos',
