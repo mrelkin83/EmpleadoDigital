@@ -57,6 +57,15 @@ export function registerMiscRoutes(app: FastifyInstance, ctx: AppContext): void 
         .object({
           whatsappNumber: z.string().max(20).regex(/^[\d+\s()-]*$/).optional(),
           whatsappGreeting: z.string().max(300).optional(),
+          website: z.string().max(200).optional(),
+          email: z.string().max(200).optional(),
+          phoneDisplay: z.string().max(40).optional(),
+        })
+        .optional(),
+      visual: z
+        .object({
+          primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+          accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
         })
         .optional(),
       competitors: z.array(z.string().max(200)).max(50),
@@ -75,7 +84,14 @@ export function registerMiscRoutes(app: FastifyInstance, ctx: AppContext): void 
     const changes = Object.fromEntries(
       Object.entries(parsed.data).filter(([, v]) => v !== undefined),
     ) as Partial<typeof current>;
-    const updated = { ...current, ...changes, tenantId: DEFAULT_TENANT_ID };
+    const updated = {
+      ...current,
+      ...changes,
+      // Objetos anidados: merge para no perder campos que la UI no envía (ej. logoFilename).
+      ...(changes.contact ? { contact: { ...current.contact, ...changes.contact } } : {}),
+      ...(changes.visual ? { visual: { ...current.visual, ...changes.visual } } : {}),
+      tenantId: DEFAULT_TENANT_ID,
+    };
     await ctx.store.saveBrand(updated);
     await ctx.logActivity({
       actor: 'usuario',
@@ -131,6 +147,29 @@ export function registerMiscRoutes(app: FastifyInstance, ctx: AppContext): void 
       summary: `Nivel de autonomía actualizado a "${parsed.data.mode}".`,
     });
     return ctx.autonomy;
+  });
+
+  // Logo de la marca (PNG con transparencia recomendado): se estampa en las
+  // piezas generadas. Vive en uploads/ y se sirve por /media/.
+  app.post('/api/brand/logo', async (request, reply) => {
+    const brand = await ctx.store.getBrand(DEFAULT_TENANT_ID);
+    if (!brand) return reply.status(404).send({ error: 'not_found' });
+    const file = await request.file();
+    if (!file) return reply.status(400).send({ error: 'file_missing' });
+    const ext = file.mimetype === 'image/png' ? 'png' : file.mimetype === 'image/jpeg' ? 'jpg' : null;
+    if (!ext) {
+      return reply.status(415).send({ error: 'unsupported_media_type', message: 'Usa PNG o JPEG.' });
+    }
+    const filename = `logo-${randomUUID()}.${ext}`;
+    const { createWriteStream } = await import('node:fs');
+    const { pipeline } = await import('node:stream/promises');
+    const path = await import('node:path');
+    const { UPLOADS_DIR } = await import('../server.js');
+    await pipeline(file.file, createWriteStream(path.join(UPLOADS_DIR, filename)));
+
+    const updated = { ...brand, visual: { ...brand.visual, logoFilename: filename } };
+    await ctx.store.saveBrand(updated);
+    return reply.status(201).send({ logoFilename: filename, url: `/media/${filename}` });
   });
 
   // --- Reglas de keywords del Community Manager (spec §26) ---

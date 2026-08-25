@@ -1,23 +1,133 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import sharp from 'sharp';
-import type { BrandMemory } from '@empleado/brand';
+import { whatsappLink, type BrandMemory } from '@empleado/brand';
 import { generateGeminiImage, generateGeminiVideo } from '@empleado/ai-providers';
 import { logger } from '@empleado/shared';
 import { UPLOADS_DIR } from '../server.js';
 
 /**
- * Generador de imágenes de marca (Fase 4 — Imagen). Plantilla determinista con
- * sharp: fondo de marca + hook como titular + pie con el nombre. Sin servicios
- * externos ni coste por imagen; cuando se integre un proveedor de imagen IA,
- * esta plantilla queda como fallback y para posts de texto.
+ * Generación de material gráfico (Fase 4). Plantillas deterministas con sharp
+ * (sin coste, sin erratas) + fotografía/video IA con dirección de arte. Todas
+ * las piezas llevan el kit de marca: colores, logo y datos de contacto
+ * (web/teléfono/correo) desde la Brand Memory.
  */
 const W = 1080;
 const H = 1080;
-const BG = '#12263f';
-const ACCENT = '#d9a441';
-const TEXT = '#f5f7fa';
-const MUTED = '#9db2c9';
+
+interface Palette {
+  bg: string;
+  bgDark: string;
+  accent: string;
+  text: string;
+  muted: string;
+}
+
+function palette(brand: BrandMemory): Palette {
+  const bg = brand.visual?.primaryColor ?? '#12263f';
+  const accent = brand.visual?.accentColor ?? '#d9a441';
+  return { bg, bgDark: darken(bg, 0.35), accent, text: '#f5f7fa', muted: '#9db2c9' };
+}
+
+function darken(hex: string, factor: number): string {
+  const n = (i: number) =>
+    Math.max(0, Math.round(parseInt(hex.slice(i, i + 2), 16) * (1 - factor)))
+      .toString(16)
+      .padStart(2, '0');
+  return `#${n(1)}${n(3)}${n(5)}`;
+}
+
+/** Línea de contacto para la franja inferior: solo los datos configurados. */
+function contactLine(brand: BrandMemory): string {
+  return [brand.contact?.website, brand.contact?.phoneDisplay, brand.contact?.email]
+    .filter((v): v is string => Boolean(v?.trim()))
+    .join('   ·   ');
+}
+
+/**
+ * Iconos vectoriales de apoyo (infografía): trazos simples sobre viewBox 0-100,
+ * elegidos por palabras clave del texto. Deterministas: sin assets externos.
+ */
+const ICONS: Record<string, string> = {
+  doc: '<rect x="25" y="12" width="50" height="76" rx="6"/><line x1="36" y1="32" x2="64" y2="32"/><line x1="36" y1="48" x2="64" y2="48"/><line x1="36" y1="64" x2="55" y2="64"/>',
+  ship: '<rect x="18" y="40" width="20" height="14"/><rect x="40" y="40" width="20" height="14"/><rect x="29" y="26" width="20" height="14"/><path d="M12 60 h76 l-10 20 h-56 z"/>',
+  lupa: '<circle cx="44" cy="44" r="24"/><line x1="62" y1="62" x2="84" y2="84"/>',
+  balanza: '<line x1="50" y1="14" x2="50" y2="82"/><line x1="22" y1="26" x2="78" y2="26"/><path d="M12 52 a12 12 0 0 0 24 0 l-12 -26 z"/><path d="M64 52 a12 12 0 0 0 24 0 l-12 -26 z"/><line x1="34" y1="86" x2="66" y2="86"/>',
+  money: '<circle cx="50" cy="50" r="34"/><path d="M60 38 a12 8 0 0 0 -20 4 c0 6 8 7 12 8 c6 1 12 3 10 10 a12 8 0 0 1 -22 2"/><line x1="50" y1="28" x2="50" y2="72"/>',
+  check: '<circle cx="50" cy="50" r="36"/><polyline points="34,52 46,64 68,38"/>',
+  alerta: '<path d="M50 14 L88 82 H12 Z"/><line x1="50" y1="40" x2="50" y2="60"/><circle cx="50" cy="70" r="2.5"/>',
+  reloj: '<circle cx="50" cy="50" r="34"/><polyline points="50,30 50,52 66,60"/>',
+  phone: '<rect x="32" y="10" width="36" height="80" rx="8"/><line x1="44" y1="80" x2="56" y2="80"/>',
+  globe: '<circle cx="50" cy="50" r="34"/><ellipse cx="50" cy="50" rx="14" ry="34"/><line x1="16" y1="50" x2="84" y2="50"/>',
+  mail: '<rect x="14" y="26" width="72" height="48" rx="6"/><polyline points="16,30 50,56 84,30"/>',
+};
+
+const ICON_KEYWORDS: Array<[RegExp, string]> = [
+  [/\b(pag|dinero|impuesto|tribut|cost|valor|honorari|arancel)/i, 'money'],
+  [/\b(document|factur|acta|requerimient|declaraci|papel|contrato|registro)/i, 'doc'],
+  [/\b(puert|contenedor|import|mercanc|embarqu|carga|aduan)/i, 'ship'],
+  [/\b(verific|revis|clasific|inspecci|analiz|busca)/i, 'lupa'],
+  [/\b(dian|sanci|legal|ley|norma|abogad|defens)/i, 'balanza'],
+  [/\b(plazo|tiempo|hora|dia|urgen|venc)/i, 'reloj'],
+  [/\b(error|riesgo|cuidado|alerta|peligro|multa)/i, 'alerta'],
+];
+
+function pickIcon(text: string): string {
+  for (const [re, name] of ICON_KEYWORDS) if (re.test(text)) return name;
+  return 'check';
+}
+
+/** Renderiza un icono en (x,y) con el tamaño y color dados. */
+function iconSvg(name: string, x: number, y: number, size: number, color: string, opacity = 1): string {
+  const inner = ICONS[name] ?? ICONS['check']!;
+  return `<g transform="translate(${x},${y}) scale(${size / 100})" fill="none" stroke="${color}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}">${inner}</g>`;
+}
+
+/** Fondo con degradado + trazos decorativos sutiles, común a todas las plantillas. */
+function baseBackground(pal: Palette): string {
+  return `
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.6" y2="1">
+      <stop offset="0" stop-color="${pal.bg}"/>
+      <stop offset="1" stop-color="${pal.bgDark}"/>
+    </linearGradient>
+  </defs>
+  <rect width="${W}" height="${H}" fill="url(#bg)"/>
+  <circle cx="${W - 60}" cy="120" r="220" fill="${pal.accent}" opacity="0.06"/>
+  <circle cx="${W - 60}" cy="120" r="140" fill="${pal.accent}" opacity="0.05"/>
+  <rect x="0" y="${H - 150}" width="${W}" height="2" fill="${pal.accent}" opacity="0.35"/>`;
+}
+
+/** Franja inferior de marca: nombre + datos de contacto (+ indicador opcional). */
+function footerSvg(brand: BrandMemory, pal: Palette, rightText?: string): string {
+  const contacts = contactLine(brand);
+  return `
+  <text x="80" y="${H - 92}" font-family="Arial, sans-serif" font-size="36" font-weight="bold" fill="${pal.accent}" letter-spacing="0.5">${escapeXml(brand.brandName)}</text>
+  ${contacts ? `<text x="80" y="${H - 44}" font-family="Arial, sans-serif" font-size="26" fill="${pal.muted}">${escapeXml(contacts)}</text>` : ''}
+  ${rightText ? `<text x="${W - 80}" y="${H - 44}" text-anchor="end" font-family="Arial, sans-serif" font-size="30" fill="${pal.muted}">${escapeXml(rightText)}</text>` : ''}`;
+}
+
+/** Estampa el logo de la marca (si está subido) en la esquina superior derecha. */
+async function composeWithLogo(
+  pipeline: sharp.Sharp,
+  brand: BrandMemory,
+): Promise<sharp.Sharp> {
+  const logoFile = brand.visual?.logoFilename;
+  if (!logoFile) return pipeline;
+  try {
+    const logo = await sharp(path.join(UPLOADS_DIR, logoFile))
+      .resize({ height: 96, fit: 'inside' })
+      .png()
+      .toBuffer();
+    const meta = await sharp(logo).metadata();
+    return sharp(await pipeline.toBuffer()).composite([
+      { input: logo, top: 64, left: W - 64 - (meta.width ?? 96) },
+    ]);
+  } catch (err) {
+    logger.warn({ err, logoFile }, 'No se pudo estampar el logo; se continúa sin él');
+    return pipeline;
+  }
+}
 
 export interface GeneratedImage {
   filename: string;
@@ -26,68 +136,87 @@ export interface GeneratedImage {
   source: 'ai' | 'template';
 }
 
+/** Dirección de arte compartida para las piezas fotográficas IA. */
+function artDirection(brand: BrandMemory): string {
+  return [
+    `Contexto del negocio: ${brand.niche} en ${brand.market}.`,
+    'Dirección de arte: fotografía editorial premium tipo revista de negocios,',
+    'lente 50mm, profundidad de campo corta, iluminación cinematográfica cálida,',
+    'compo­sición con regla de tercios y espacio negativo amplio a la izquierda,',
+    'paleta sobria de azul marino profundo con acentos dorados, aspecto sofisticado y confiable.',
+    'Ambiente de comercio exterior: puertos al amanecer, contenedores, documentos aduaneros elegantes,',
+    'oficinas jurídicas modernas — según corresponda al tema.',
+    'Incluye objetos y metáforas visuales que apoyen el concepto (composición editorial con intención, no foto genérica).',
+    'SIN texto, SIN letras, SIN logotipos, SIN marcas de agua dentro de la imagen.',
+  ].join(' ');
+}
+
 /**
- * Imagen fotográfica con IA (Gemini). Sin texto dentro de la imagen — los
- * modelos aún cometen erratas tipográficas y el copy ya vive en el caption.
- * Si falla o no hay clave, el llamador cae a la plantilla.
+ * Imagen fotográfica con IA (Gemini) + franja de marca inferior estampada por
+ * plantilla (el texto de marca nunca lo escribe la IA: cero erratas).
  */
 export async function generateAiImage(
   apiKey: string,
   brand: BrandMemory,
   piece: { hook: string; topic: string; pillar: string },
 ): Promise<GeneratedImage> {
-  const prompt = [
-    `Fotografía editorial profesional para Instagram (cuadrada 1:1) que ilustre: "${piece.topic}".`,
-    `Contexto del negocio: ${brand.niche} en ${brand.market}.`,
-    'Estilo: fotografía realista de alta calidad, iluminación natural, composición limpia con espacio negativo,',
-    'paleta sobria con azul marino profundo y acentos dorados. Ambiente de comercio exterior:',
-    'puertos, contenedores, documentos, aduanas u oficinas profesionales según corresponda al tema.',
-    'SIN texto, SIN letras, SIN logotipos, SIN marcas de agua dentro de la imagen.',
-  ].join(' ');
-
+  const prompt = `Fotografía editorial profesional para Instagram (cuadrada 1:1) que ilustre: "${piece.topic}". ${artDirection(brand)}`;
   const { bytes } = await generateGeminiImage(apiKey, prompt);
+  const pal = palette(brand);
+
+  // Franja de marca sobre la foto: banda inferior semitransparente + contacto.
+  const overlay = Buffer.from(`<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="${H - 150}" width="${W}" height="150" fill="${pal.bgDark}" opacity="0.82"/>
+  <rect x="0" y="${H - 150}" width="${W}" height="3" fill="${pal.accent}"/>
+  ${footerSvg(brand, pal)}
+</svg>`);
+
+  let pipeline = sharp(bytes).resize(W, H, { fit: 'cover' }).composite([{ input: overlay }]);
+  pipeline = await composeWithLogo(pipeline, brand);
+
   const filename = `${randomUUID()}.jpg`;
-  await sharp(bytes)
-    .resize(1080, 1080, { fit: 'cover' })
-    .jpeg({ quality: 92 })
-    .toFile(path.join(UPLOADS_DIR, filename));
-  logger.info({ filename }, 'Imagen generada con Gemini');
+  await pipeline.jpeg({ quality: 92 }).toFile(path.join(UPLOADS_DIR, filename));
+  logger.info({ filename }, 'Imagen IA generada con franja de marca');
   return { filename, mime: 'image/jpeg', source: 'ai' };
 }
 
+/** Plantilla tipográfica de marca (portadas y posts de texto). */
 export async function generateBrandImage(
   brand: BrandMemory,
   piece: { hook: string; topic: string; pillar: string },
 ): Promise<GeneratedImage> {
+  const pal = palette(brand);
   const headline = (piece.hook || piece.topic).trim();
-  const lines = wrap(headline, 24, 8);
-  const fontSize = lines.length <= 3 ? 72 : lines.length <= 5 ? 60 : 48;
-  const lineHeight = Math.round(fontSize * 1.25);
+  const lines = wrap(headline, 22, 7);
+  const fontSize = lines.length <= 3 ? 76 : lines.length <= 5 ? 64 : 52;
+  const lineHeight = Math.round(fontSize * 1.22);
   const blockHeight = lines.length * lineHeight;
-  const startY = Math.round((H - blockHeight) / 2 + fontSize * 0.8) - 40;
+  const startY = Math.round((H - 150 - blockHeight) / 2 + fontSize * 0.8);
 
   const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
-  <rect width="${W}" height="${H}" fill="${BG}"/>
-  <rect x="80" y="${startY - fontSize - 40}" width="120" height="10" fill="${ACCENT}"/>
+  ${baseBackground(pal)}
+  <text x="80" y="${startY - fontSize - 56}" font-family="Arial, sans-serif" font-size="30" font-weight="bold" fill="${pal.accent}" letter-spacing="4">${escapeXml(piece.pillar.toUpperCase())}</text>
+  <rect x="80" y="${startY - fontSize - 36}" width="140" height="8" fill="${pal.accent}"/>
+  ${iconSvg(pickIcon(headline), W - 280, H - 380, 180, pal.accent, 0.35)}
   ${lines
     .map(
       (line, i) =>
-        `<text x="80" y="${startY + i * lineHeight}" font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="bold" fill="${TEXT}">${escapeXml(line)}</text>`,
+        `<text x="80" y="${startY + i * lineHeight}" font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="bold" fill="${pal.text}">${escapeXml(line)}</text>`,
     )
     .join('\n  ')}
-  <text x="80" y="${H - 90}" font-family="Arial, sans-serif" font-size="34" fill="${MUTED}">${escapeXml(piece.pillar)}</text>
-  <text x="80" y="${H - 46}" font-family="Arial, sans-serif" font-size="38" font-weight="bold" fill="${ACCENT}">${escapeXml(brand.brandName)}</text>
+  ${footerSvg(brand, pal)}
 </svg>`;
 
+  let pipeline = sharp(Buffer.from(svg));
+  pipeline = await composeWithLogo(pipeline, brand);
   const filename = `${randomUUID()}.jpg`;
-  await sharp(Buffer.from(svg)).jpeg({ quality: 92 }).toFile(path.join(UPLOADS_DIR, filename));
+  await pipeline.jpeg({ quality: 92 }).toFile(path.join(UPLOADS_DIR, filename));
   return { filename, mime: 'image/jpeg', source: 'template' };
 }
 
 /**
- * Video corto vertical con Veo para reels. Requiere plan de pago de AI Studio;
- * en tier gratuito el error se propaga con mensaje claro. Sin texto en pantalla
- * (mismas razones que la imagen); el copy vive en el caption.
+ * Video corto vertical con Veo para reels, con la misma dirección de arte.
+ * (La franja de marca en video requiere post-producción — pendiente ffmpeg.)
  */
 export async function generateAiVideo(
   apiKey: string,
@@ -95,11 +224,12 @@ export async function generateAiVideo(
   piece: { hook: string; topic: string; pillar: string },
 ): Promise<{ filename: string; mime: 'video/mp4'; kind: 'video' }> {
   const prompt = [
-    `Video corto vertical (9:16) de estilo editorial profesional para un reel de Instagram que ilustre: "${piece.topic}".`,
-    `Contexto del negocio: ${brand.niche} en ${brand.market}.`,
-    'Estilo: cinematográfico realista, iluminación natural, ritmo sereno, paleta sobria con azul marino y acentos dorados.',
-    'Ambiente de comercio exterior: puertos, contenedores, documentos aduaneros, oficinas profesionales.',
-    'SIN texto en pantalla, SIN rótulos, SIN logotipos.',
+    `Video corto vertical (9:16) para un reel de Instagram que ilustre: "${piece.topic}".`,
+    'Estilo: motion graphics editorial premium combinado con tomas cinematográficas —',
+    'iconos y elementos infográficos animados (líneas que se trazan, gráficos que crecen, objetos flotantes)',
+    'integrados con imágenes reales de puertos, contenedores y documentos aduaneros.',
+    artDirection(brand),
+    'Movimiento de cámara suave y elegante, transiciones fluidas, ritmo dinámico pero sereno.',
   ].join(' ');
 
   const { bytes } = await generateGeminiVideo(apiKey, prompt, { aspectRatio: '9:16' });
@@ -118,9 +248,8 @@ export interface GeneratedCarousel {
 }
 
 /**
- * Carrusel completo (Fase 4): portada con IA (Gemini, si hay clave; plantilla
- * si no o si falla) + una lámina de texto por punto del cuerpo, renderizada con
- * plantilla determinista — el texto de las láminas nunca tiene erratas de IA.
+ * Carrusel completo: portada IA (o plantilla) + lámina por punto + lámina final
+ * de contacto (CTA). Máximo 10 láminas (límite de Instagram).
  */
 export async function generateCarousel(
   geminiKey: string | undefined,
@@ -136,13 +265,17 @@ export async function generateCarousel(
     ? await generateAiImage(geminiKey, brand, piece).catch(() => generateBrandImage(brand, piece))
     : await generateBrandImage(brand, piece);
 
+  const hasContact = Boolean(contactLine(brand) || whatsappLink(brand));
+  const maxPoints = hasContact ? 8 : 9;
+  const total = Math.min(points.length, maxPoints);
+
   const slides: Array<{ filename: string; mime: string }> = [
     { filename: cover.filename, mime: cover.mime },
   ];
-  const total = Math.min(points.length, 9);
   for (let i = 0; i < total; i++) {
     slides.push(await renderTextSlide(brand, points[i]!, i + 1, total));
   }
+  if (hasContact) slides.push(await renderCtaSlide(brand));
 
   return { filename: cover.filename, mime: 'image/jpeg', kind: 'carousel', items: slides };
 }
@@ -154,7 +287,6 @@ function extractPoints(body: string): string[] {
     .filter((l) => /^(\d{1,2}[.):]|[0-9]️?⃣|[•▪➡-])\s*/u.test(l))
     .map((l) => l.replace(/^(\d{1,2}[.):]|[0-9]️?⃣|[•▪➡-])\s*/u, '').trim());
   if (numbered.length >= 2) return numbered;
-  // Sin lista: párrafos sustanciales (excluye hook/disclaimer cortos).
   return body
     .split(/\n{2,}/)
     .map((p) => p.replace(/\n/g, ' ').trim())
@@ -168,27 +300,65 @@ async function renderTextSlide(
   index: number,
   total: number,
 ): Promise<{ filename: string; mime: string }> {
-  const lines = wrap(text, 30, 9);
-  const fontSize = lines.length <= 4 ? 54 : lines.length <= 6 ? 46 : 40;
-  const lineHeight = Math.round(fontSize * 1.3);
-  const startY = 380;
+  const pal = palette(brand);
+  const lines = wrap(text, 28, 9);
+  const fontSize = lines.length <= 4 ? 56 : lines.length <= 6 ? 48 : 42;
+  const lineHeight = Math.round(fontSize * 1.28);
+  const startY = 400;
 
   const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
-  <rect width="${W}" height="${H}" fill="${BG}"/>
-  <text x="80" y="230" font-family="Arial, sans-serif" font-size="120" font-weight="bold" fill="${ACCENT}">${index}</text>
-  <rect x="80" y="270" width="120" height="8" fill="${ACCENT}"/>
+  ${baseBackground(pal)}
+  <text x="80" y="250" font-family="Arial, sans-serif" font-size="140" font-weight="bold" fill="${pal.accent}" opacity="0.95">${index}</text>
+  <rect x="80" y="290" width="140" height="8" fill="${pal.accent}"/>
+  ${iconSvg(pickIcon(text), W - 260, 120, 160, pal.accent, 0.9)}
   ${lines
     .map(
       (line, i) =>
-        `<text x="80" y="${startY + i * lineHeight}" font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="bold" fill="${TEXT}">${escapeXml(line)}</text>`,
+        `<text x="80" y="${startY + i * lineHeight}" font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="bold" fill="${pal.text}">${escapeXml(line)}</text>`,
     )
     .join('\n  ')}
-  <text x="80" y="${H - 46}" font-family="Arial, sans-serif" font-size="34" font-weight="bold" fill="${ACCENT}">${escapeXml(brand.brandName)}</text>
-  <text x="${W - 80}" y="${H - 46}" text-anchor="end" font-family="Arial, sans-serif" font-size="34" fill="${MUTED}">${index} / ${total}</text>
+  ${footerSvg(brand, pal, `${index} / ${total}`)}
 </svg>`;
 
+  let pipeline = sharp(Buffer.from(svg));
+  pipeline = await composeWithLogo(pipeline, brand);
   const filename = `${randomUUID()}.jpg`;
-  await sharp(Buffer.from(svg)).jpeg({ quality: 92 }).toFile(path.join(UPLOADS_DIR, filename));
+  await pipeline.jpeg({ quality: 92 }).toFile(path.join(UPLOADS_DIR, filename));
+  return { filename, mime: 'image/jpeg' };
+}
+
+/** Lámina final del carrusel: llamado a la acción con todos los datos de contacto. */
+async function renderCtaSlide(brand: BrandMemory): Promise<{ filename: string; mime: string }> {
+  const pal = palette(brand);
+  const rows: Array<{ icon: string; text: string }> = [
+    brand.contact?.whatsappNumber
+      ? { icon: 'phone', text: `WhatsApp: ${brand.contact.phoneDisplay ?? brand.contact.whatsappNumber}` }
+      : null,
+    brand.contact?.website ? { icon: 'globe', text: brand.contact.website } : null,
+    brand.contact?.email ? { icon: 'mail', text: brand.contact.email } : null,
+  ].filter((r): r is { icon: string; text: string } => r !== null);
+
+  const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+  ${baseBackground(pal)}
+  <text x="80" y="330" font-family="Arial, sans-serif" font-size="30" font-weight="bold" fill="${pal.accent}" letter-spacing="4">HABLEMOS DE TU CASO</text>
+  <rect x="80" y="352" width="140" height="8" fill="${pal.accent}"/>
+  <text x="80" y="450" font-family="Arial, sans-serif" font-size="64" font-weight="bold" fill="${pal.text}">¿Necesitas ayuda</text>
+  <text x="80" y="530" font-family="Arial, sans-serif" font-size="64" font-weight="bold" fill="${pal.text}">con tu importación?</text>
+  ${rows
+    .map(
+      (row, i) =>
+        `${iconSvg(row.icon, 80, 610 + i * 70, 44, pal.accent)}
+  <text x="144" y="${642 + i * 70}" font-family="Arial, sans-serif" font-size="38" fill="${pal.text}">${escapeXml(row.text)}</text>`,
+    )
+    .join('\n  ')}
+  <text x="80" y="${640 + rows.length * 70 + 24}" font-family="Arial, sans-serif" font-size="30" fill="${pal.muted}">Escríbenos por DM y te orientamos.</text>
+  ${footerSvg(brand, pal)}
+</svg>`;
+
+  let pipeline = sharp(Buffer.from(svg));
+  pipeline = await composeWithLogo(pipeline, brand);
+  const filename = `${randomUUID()}.jpg`;
+  await pipeline.jpeg({ quality: 92 }).toFile(path.join(UPLOADS_DIR, filename));
   return { filename, mime: 'image/jpeg' };
 }
 

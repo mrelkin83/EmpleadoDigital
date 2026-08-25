@@ -20,10 +20,19 @@ export interface BrandMemory {
   /** Disclaimers configurables por industria (spec §28). */
   disclaimers: string[];
   /**
-   * Embudo de conversión (spec §78): a dónde se dirige a los interesados.
-   * El número va con código de país sin signos (ej. 573001234567).
+   * Embudo de conversión y datos de contacto (spec §78): a dónde se dirige a
+   * los interesados y qué datos de la marca llevan las piezas gráficas.
+   * El número de WhatsApp va con código de país sin signos (ej. 573001234567).
    */
-  contact?: { whatsappNumber?: string; whatsappGreeting?: string };
+  contact?: {
+    whatsappNumber?: string;
+    whatsappGreeting?: string;
+    website?: string;
+    email?: string;
+    phoneDisplay?: string;
+  };
+  /** Identidad visual para las piezas generadas (colores hex y logo subido). */
+  visual?: { primaryColor?: string; accentColor?: string; logoFilename?: string };
   competitors: string[];
   faq: Array<{ question: string; answer: string; verification: KnowledgeVerification }>;
   contentPillars: string[];

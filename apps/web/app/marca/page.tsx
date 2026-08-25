@@ -32,7 +32,14 @@ interface Brand {
   disclaimers: string[];
   competitors: string[];
   contentPillars: string[];
-  contact?: { whatsappNumber?: string; whatsappGreeting?: string };
+  contact?: {
+    whatsappNumber?: string;
+    whatsappGreeting?: string;
+    website?: string;
+    email?: string;
+    phoneDisplay?: string;
+  };
+  visual?: { primaryColor?: string; accentColor?: string; logoFilename?: string };
 }
 
 interface KeywordRule {
@@ -136,6 +143,19 @@ export default function BrandPage() {
           ...(String(form.get('whatsappGreeting') ?? '').trim()
             ? { whatsappGreeting: String(form.get('whatsappGreeting')).trim() }
             : {}),
+          ...(String(form.get('website') ?? '').trim()
+            ? { website: String(form.get('website')).trim() }
+            : {}),
+          ...(String(form.get('email') ?? '').trim()
+            ? { email: String(form.get('email')).trim() }
+            : {}),
+          ...(String(form.get('phoneDisplay') ?? '').trim()
+            ? { phoneDisplay: String(form.get('phoneDisplay')).trim() }
+            : {}),
+        },
+        visual: {
+          primaryColor: String(form.get('primaryColor') || '#12263f'),
+          accentColor: String(form.get('accentColor') || '#d9a441'),
         },
       };
       const res = await fetch('/api/brand', {
@@ -267,6 +287,53 @@ export default function BrandPage() {
             placeholder="Hola, vengo de Instagram y quiero una asesoría aduanera"
           />
         </label>
+        <label>
+          Página web (aparece en las piezas gráficas)
+          <input name="website" defaultValue={brand.contact?.website ?? ''} maxLength={200} placeholder="www.pedroabogadoaduanero.com" />
+        </label>
+        <label>
+          Correo (aparece en las piezas gráficas)
+          <input name="email" defaultValue={brand.contact?.email ?? ''} maxLength={200} placeholder="contacto@..." />
+        </label>
+        <label>
+          Teléfono para mostrar (aparece en las piezas gráficas)
+          <input name="phoneDisplay" defaultValue={brand.contact?.phoneDisplay ?? ''} maxLength={40} placeholder="+57 300 123 4567" />
+        </label>
+        <div className="actions">
+          <label className="field">
+            Color principal
+            <input type="color" name="primaryColor" defaultValue={brand.visual?.primaryColor ?? '#12263f'} />
+          </label>
+          <label className="field">
+            Color de acento
+            <input type="color" name="accentColor" defaultValue={brand.visual?.accentColor ?? '#d9a441'} />
+          </label>
+          <label className="field">
+            Logo (PNG con fondo transparente)
+            <input
+              type="file"
+              accept="image/png,image/jpeg"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const fd = new FormData();
+                fd.append('file', file);
+                void fetch('/api/brand/logo', { method: 'POST', body: fd }).then(async (r) => {
+                  setMessage(r.ok ? 'Logo subido ✓' : 'No se pudo subir el logo');
+                  if (r.ok) setBrand(await fetch('/api/brand').then((x) => x.json()));
+                });
+                e.target.value = '';
+              }}
+            />
+          </label>
+          {brand.visual?.logoFilename && (
+            <img
+              src={`/media/${brand.visual.logoFilename}`}
+              alt="Logo actual"
+              style={{ height: 48, alignSelf: 'end' }}
+            />
+          )}
+        </div>
         <button type="submit" disabled={saving}>
           {saving ? 'Guardando…' : 'Guardar marca'}
         </button>
