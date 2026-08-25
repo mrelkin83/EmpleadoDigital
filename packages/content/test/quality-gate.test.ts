@@ -87,6 +87,18 @@ describe('Quality Gate', () => {
     const report = runQualityGate(piece(), brand);
     expect(report.results.find((r) => r.check === 'no_ai_slop')?.passed).toBe(true);
   });
+
+  it('no marca como slop un contraste "no es X, es Y" (retórica válida en español, no IA)', () => {
+    // Falso positivo real detectado probando el gate con generación real (Anthropic):
+    // "Eso no es un ahorro, es un riesgo directo sobre tu carga." es buena escritura,
+    // no un tic de IA — a diferencia del inglés, este contraste es una figura retórica
+    // legítima y muy usada en copywriting en español.
+    const report = runQualityGate(
+      piece({ body: `Eso no es un ahorro, es un riesgo directo sobre tu carga. ${DISCLAIMER}` }),
+      brand,
+    );
+    expect(report.results.find((r) => r.check === 'no_ai_slop')?.passed).toBe(true);
+  });
 });
 
 describe('flujo de estados de contenido', () => {

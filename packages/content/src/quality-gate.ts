@@ -33,7 +33,6 @@ const AI_SLOP_PATTERNS: { label: string; regex: RegExp }[] = [
   { label: '"cabe destacar/mencionar/resaltar/señalar"', regex: /cabe (destacar|mencionar|resaltar|señalar)/i },
   { label: '"en el mundo actual/de hoy"', regex: /en el mundo (actual|de hoy)/i },
   { label: '"en un mundo cada vez más / donde"', regex: /en un mundo (cada vez más|donde)/i },
-  { label: '"no es/se trata de X, sino de Y" (contraste binario)', regex: /no (es|se trata) .{3,60},\s*(sino|es)\s/i },
   { label: '"a fin de cuentas" / "al final del día"', regex: /(a fin de cuentas|al final del día)/i },
   { label: '"sin duda alguna"', regex: /sin duda alguna/i },
   { label: '"en resumen" / "en pocas palabras"', regex: /(en resumen|en pocas palabras)[:,]/i },
