@@ -70,12 +70,9 @@ export default function WeeklyReportPage() {
     <div className="container">
       <header className="top">
         <h1>Reporte semanal</h1>
-        <span>
-          <button className="small" onClick={() => window.print()}>
-            Imprimir / PDF
-          </button>{' '}
-          <a href="/">← Volver al dashboard</a>
-        </span>
+        <button className="small" onClick={() => window.print()}>
+          Imprimir / PDF
+        </button>
       </header>
 
       <p className="muted">

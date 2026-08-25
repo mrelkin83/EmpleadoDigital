@@ -187,7 +187,6 @@ export default function BrandPage() {
     <div className="container">
       <header className="top">
         <h1>Marca · {brand.brandName}</h1>
-        <a href="/">← Volver al dashboard</a>
       </header>
 
       <form className="gen card" onSubmit={onSave}>

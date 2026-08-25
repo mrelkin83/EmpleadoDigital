@@ -7,14 +7,6 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
  * contenido y generación. Vista mínima; crecerá con Rendimiento y Calendario.
  */
 
-interface Activity {
-  id: string;
-  at: string;
-  actor: string;
-  summary: string;
-  kind: string;
-}
-
 interface Approval {
   id: string;
   kind: string;
@@ -127,7 +119,6 @@ interface Slot {
 
 export default function Dashboard() {
   const [health, setHealth] = useState<Health | null>(null);
-  const [activity, setActivity] = useState<Activity[]>([]);
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [content, setContent] = useState<Piece[]>([]);
   const [calendar, setCalendar] = useState<Slot[]>([]);
@@ -150,9 +141,8 @@ export default function Dashboard() {
   const refresh = useCallback(async () => {
     try {
       const today = new Date().toISOString().slice(0, 10);
-      const [h, a, ap, c, cal, an, au, rec] = await Promise.all([
+      const [h, ap, c, cal, an, au, rec] = await Promise.all([
         fetch('/health').then((r) => r.json()),
-        fetch('/api/activity').then((r) => r.json()),
         fetch('/api/approvals?status=pending').then((r) => r.json()),
         fetch('/api/content').then((r) => r.json()),
         fetch(`/api/calendar?from=${today}`).then((r) => r.json()),
@@ -161,7 +151,6 @@ export default function Dashboard() {
         fetch('/api/recommendations').then((r) => r.json()),
       ]);
       setHealth(h);
-      setActivity(a);
       setApprovals(ap);
       setContent(c);
       setCalendar(cal.slots ?? []);
@@ -493,9 +482,7 @@ export default function Dashboard() {
     <div className="container">
       <header className="top">
         <h1>
-          Empleado Digital · Marketing{' '}
-          <a href="/marca" style={{ fontSize: '0.8rem' }}>Configurar marca</a>{' '}
-          <a href="/reporte" style={{ fontSize: '0.8rem' }}>Reporte semanal</a>
+          Empleado Digital · Marketing
         </h1>
         <span className="status">
           <span className={`dot ${health?.instagramConnected ? 'ok' : 'off'}`} />
@@ -1077,22 +1064,7 @@ export default function Dashboard() {
             </p>
           )}
         </section>
-        
-<section className="card">
-          <h2>Bitácora del empleado</h2>
-          {activity.length === 0 && <p className="empty">Sin actividad todavía.</p>}
-          <ul className="plain">
-            {activity.slice(0, 10).map((a) => (
-              <li key={a.id}>
-                {a.summary}
-                <div className="muted">
-                  {new Date(a.at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })} · {a.actor}
                 </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-        </div>
       
       </div>
     </div>
