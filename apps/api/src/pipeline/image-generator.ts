@@ -98,13 +98,36 @@ function baseBackground(pal: Palette): string {
   <rect x="0" y="${H - 150}" width="${W}" height="2" fill="${pal.accent}" opacity="0.35"/>`;
 }
 
+/**
+ * Banner superior con el gancho (hook) de la pieza: scrim + pilar + titular
+ * envuelto. Toda pieza generada (imagen IA, portada de carrusel, video) debe
+ * mostrar el gancho en la gráfica misma, no solo en el caption — es lo que
+ * detiene el scroll. Se compone por plantilla, nunca lo escribe la IA.
+ */
+function hookBannerSvg(brand: BrandMemory, pal: Palette, pillar: string, hook: string, w = W): string {
+  const lines = wrap(hook, Math.round(w / 42), 4);
+  const fontSize = lines.length <= 2 ? 52 : lines.length === 3 ? 44 : 38;
+  const lineHeight = Math.round(fontSize * 1.25);
+  const bannerHeight = 100 + lines.length * lineHeight;
+  return `
+  <rect x="0" y="0" width="${w}" height="${bannerHeight}" fill="${pal.bgDark}" opacity="0.85"/>
+  <rect x="0" y="${bannerHeight}" width="${w}" height="3" fill="${pal.accent}"/>
+  <text x="60" y="56" font-family="Arial, sans-serif" font-size="26" font-weight="bold" fill="${pal.accent}" letter-spacing="3">${escapeXml(pillar.toUpperCase())}</text>
+  ${lines
+    .map(
+      (line, i) =>
+        `<text x="60" y="${96 + i * lineHeight}" font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="bold" fill="${pal.text}">${escapeXml(line)}</text>`,
+    )
+    .join('\n  ')}`;
+}
+
 /** Franja inferior de marca: nombre + datos de contacto (+ indicador opcional). */
-function footerSvg(brand: BrandMemory, pal: Palette, rightText?: string): string {
+function footerSvg(brand: BrandMemory, pal: Palette, rightText?: string, w = W, h = H): string {
   const contacts = contactLine(brand);
   return `
-  <text x="80" y="${H - 92}" font-family="Arial, sans-serif" font-size="36" font-weight="bold" fill="${pal.accent}" letter-spacing="0.5">${escapeXml(brand.brandName)}</text>
-  ${contacts ? `<text x="80" y="${H - 44}" font-family="Arial, sans-serif" font-size="26" fill="${pal.muted}">${escapeXml(contacts)}</text>` : ''}
-  ${rightText ? `<text x="${W - 80}" y="${H - 44}" text-anchor="end" font-family="Arial, sans-serif" font-size="30" fill="${pal.muted}">${escapeXml(rightText)}</text>` : ''}`;
+  <text x="80" y="${h - 92}" font-family="Arial, sans-serif" font-size="36" font-weight="bold" fill="${pal.accent}" letter-spacing="0.5">${escapeXml(brand.brandName)}</text>
+  ${contacts ? `<text x="80" y="${h - 44}" font-family="Arial, sans-serif" font-size="26" fill="${pal.muted}">${escapeXml(contacts)}</text>` : ''}
+  ${rightText ? `<text x="${w - 80}" y="${h - 44}" text-anchor="end" font-family="Arial, sans-serif" font-size="30" fill="${pal.muted}">${escapeXml(rightText)}</text>` : ''}`;
 }
 
 /** Estampa el logo de la marca (si está subido) en la esquina superior derecha. */
@@ -164,8 +187,9 @@ export async function generateAiImage(
   const { bytes } = await generateGeminiImage(apiKey, prompt);
   const pal = palette(brand);
 
-  // Franja de marca sobre la foto: banda inferior semitransparente + contacto.
+  // Gancho arriba (detiene el scroll) + franja de marca abajo (contacto).
   const overlay = Buffer.from(`<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+  ${hookBannerSvg(brand, pal, piece.pillar, piece.hook || piece.topic)}
   <rect x="0" y="${H - 150}" width="${W}" height="150" fill="${pal.bgDark}" opacity="0.82"/>
   <rect x="0" y="${H - 150}" width="${W}" height="3" fill="${pal.accent}"/>
   ${footerSvg(brand, pal)}
@@ -233,11 +257,85 @@ export async function generateAiVideo(
   ].join(' ');
 
   const { bytes } = await generateGeminiVideo(apiKey, prompt, { aspectRatio: '9:16' });
-  const filename = `${randomUUID()}.mp4`;
+  const rawFilename = `${randomUUID()}.mp4`;
+  const rawPath = path.join(UPLOADS_DIR, rawFilename);
   const { writeFile } = await import('node:fs/promises');
-  await writeFile(path.join(UPLOADS_DIR, filename), bytes);
-  logger.info({ filename, sizeKb: Math.round(bytes.length / 1024) }, 'Video generado con Veo');
-  return { filename, mime: 'video/mp4', kind: 'video' };
+  await writeFile(rawPath, bytes);
+  logger.info({ filename: rawFilename, sizeKb: Math.round(bytes.length / 1024) }, 'Video generado con Veo');
+
+  try {
+    const branded = await burnBrandOverlay(rawPath, brand, piece);
+    const { unlink } = await import('node:fs/promises');
+    await unlink(rawPath).catch(() => {});
+    return { filename: branded, mime: 'video/mp4', kind: 'video' };
+  } catch (err) {
+    // Sin overlay el video sigue siendo publicable; solo pierde el gancho quemado.
+    logger.warn({ err }, 'No se pudo quemar el gancho sobre el video; se usa sin overlay');
+    return { filename: rawFilename, mime: 'video/mp4', kind: 'video' };
+  }
+}
+
+/**
+ * Quema el gancho (banner superior) y la franja de marca (inferior) sobre el
+ * video con ffmpeg, igual que en imagen/carrusel — el gancho debe verse en
+ * TODO el material generado, no solo en el caption. El overlay se renderiza
+ * como PNG transparente (misma técnica SVG que las imágenes) y se compone
+ * con el filtro `overlay` de ffmpeg; nunca se le pide texto a la IA de video.
+ */
+async function burnBrandOverlay(
+  inputPath: string,
+  brand: BrandMemory,
+  piece: { hook: string; topic: string; pillar: string },
+): Promise<string> {
+  const { execFile } = await import('node:child_process');
+  const { promisify } = await import('node:util');
+  const { createRequire } = await import('node:module');
+  const run = promisify(execFile);
+
+  // createRequire evita ambigüedades de interoperabilidad ESM/CJS con estos
+  // paquetes (ffmpeg-static exporta un string; ffprobe-installer, un objeto).
+  const require = createRequire(import.meta.url);
+  const ffmpegPath = require('ffmpeg-static') as string;
+  const ffprobePath = (require('@ffprobe-installer/ffprobe') as { path: string }).path;
+
+  const { stdout } = await run(ffprobePath, [
+    '-v', 'error',
+    '-select_streams', 'v:0',
+    '-show_entries', 'stream=width,height',
+    '-of', 'csv=s=x:p=0',
+    inputPath,
+  ]);
+  const [w, h] = stdout.trim().split('x').map(Number);
+  if (!w || !h) throw new Error('No se pudo leer la resolución del video');
+
+  const pal = palette(brand);
+  const footerHeight = Math.round(h * 0.14);
+  const overlaySvg = `<svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg">
+  ${hookBannerSvg(brand, pal, piece.pillar, piece.hook || piece.topic, w)}
+  <rect x="0" y="${h - footerHeight}" width="${w}" height="${footerHeight}" fill="${pal.bgDark}" opacity="0.82"/>
+  <rect x="0" y="${h - footerHeight}" width="${w}" height="3" fill="${pal.accent}"/>
+  ${footerSvg(brand, pal, undefined, w, h)}
+</svg>`;
+
+  const overlayPngPath = path.join(UPLOADS_DIR, `${randomUUID()}-overlay.png`);
+  await sharp(Buffer.from(overlaySvg)).png().toFile(overlayPngPath);
+
+  const outFilename = `${randomUUID()}.mp4`;
+  const outPath = path.join(UPLOADS_DIR, outFilename);
+  try {
+    await run(ffmpegPath, [
+      '-y',
+      '-i', inputPath,
+      '-i', overlayPngPath,
+      '-filter_complex', '[0:v][1:v]overlay=0:0',
+      '-c:a', 'copy',
+      outPath,
+    ]);
+  } finally {
+    const { unlink } = await import('node:fs/promises');
+    await unlink(overlayPngPath).catch(() => {});
+  }
+  return outFilename;
 }
 
 export interface GeneratedCarousel {
