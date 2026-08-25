@@ -30,6 +30,7 @@ export async function generateCaption(
     'Contexto de marca:',
     brandContextForPrompt(input.brand),
     'Reglas: no inventes leyes ni artículos; no prometas resultados; el contenido educativo lleva el disclaimer de la marca al final del cuerpo.',
+    'El caption completo (hook + cuerpo + CTA) debe quedar por debajo de 1.800 caracteres (límite de Instagram: 2.200). En carruseles el cuerpo es un resumen: los puntos detallados van en las láminas.',
     input.rejectionFeedback?.length
       ? `Preferencias aprendidas — el cliente rechazó piezas anteriores por estos motivos, evítalos: ${input.rejectionFeedback.join(' | ')}`
       : '',

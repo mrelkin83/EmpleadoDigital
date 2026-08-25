@@ -82,6 +82,19 @@ export function runQualityGate(
     ...(isMock ? { detail: 'La pieza contiene contenido simulado ([MOCK]); no puede publicarse.' } : {}),
   });
 
+  // Límite de caption de Instagram (2.200 caracteres): hook + cuerpo + CTA.
+  // Detectarlo aquí evita el error 36004 de Meta en plena publicación.
+  const captionLength = [piece.hook, piece.body, piece.cta].filter(Boolean).join('\n\n').length;
+  results.push({
+    check: 'caption_length',
+    passed: captionLength <= 2200,
+    ...(captionLength > 2200
+      ? {
+          detail: `El caption tiene ${captionLength} caracteres y el límite de Instagram es 2.200: recorta el cuerpo (en carruseles, los puntos ya van en las láminas).`,
+        }
+      : {}),
+  });
+
   // Pilar válido según la estrategia de la marca.
   results.push({
     check: 'valid_pillar',

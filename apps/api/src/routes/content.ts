@@ -2,7 +2,6 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { runQualityGate, canTransition } from '@empleado/content';
 import { generateCaption, publishPost } from '@empleado/skills';
-import { ApprovalRequiredError, PolicyViolationError } from '@empleado/shared';
 import { randomUUID } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
 import { unlink } from 'node:fs/promises';
@@ -51,8 +50,11 @@ const editSchema = z
   .partial()
   .strict();
 
-/** Estados en los que una pieza es editable por el usuario. */
-const EDITABLE_STATUSES = new Set(['idea', 'draft', 'in_review', 'rejected']);
+/**
+ * Estados en los que una pieza es editable por el usuario. Editar una pieza
+ * aprobada la devuelve a borrador: el contenido cambió, la aprobación caduca.
+ */
+const EDITABLE_STATUSES = new Set(['idea', 'draft', 'in_review', 'rejected', 'approved']);
 
 export function registerContentRoutes(app: FastifyInstance, ctx: AppContext): void {
   app.get('/api/content', async () => {
@@ -125,7 +127,10 @@ export function registerContentRoutes(app: FastifyInstance, ctx: AppContext): vo
     const updated = {
       ...piece,
       ...changes,
-      status: piece.status === 'rejected' ? ('draft' as const) : piece.status,
+      status:
+        piece.status === 'rejected' || piece.status === 'approved'
+          ? ('draft' as const)
+          : piece.status,
       approval: 'pending' as const,
       updatedAt: new Date(),
     };
@@ -514,33 +519,76 @@ export function registerContentRoutes(app: FastifyInstance, ctx: AppContext): vo
       };
     }
 
-    try {
-      const result = await publishPost(ctx.instagram, ctx.policyEngine, {
-        piece,
-        brand,
-        media,
-        humanApproved: parsed.data.humanApproved,
-        policyContext: {
-          tenantId: DEFAULT_TENANT_ID,
-          grantedScopes: ctx.grantedScopes,
-          autonomy: ctx.autonomy,
-        },
+    // Candado anti-doble-publicación (los carruseles tardan minutos).
+    if (publishing.has(id)) {
+      return reply.status(409).send({
+        error: 'already_publishing',
+        message: 'Esta pieza ya se está publicando; espera a que termine.',
       });
-      await ctx.store.saveContent(result.piece);
-      await ctx.logActivity({
-        actor: 'orquestador',
-        kind: 'action',
-        summary: `Publiqué "${piece.hook || piece.topic}" en Instagram.`,
-      });
-      return result;
-    } catch (err) {
-      if (err instanceof ApprovalRequiredError) {
-        return reply.status(403).send({ error: err.code, message: err.message });
-      }
-      if (err instanceof PolicyViolationError) {
-        return reply.status(422).send({ error: err.code, message: err.message });
-      }
-      throw err;
     }
+
+    // Validaciones rápidas SÍNCRONAS (gate + política) para dar el error inline;
+    // la llamada larga a Meta corre en segundo plano y el estado de la pieza
+    // cambia solo (el dashboard refresca cada 10s).
+    const gate = runQualityGate(piece, brand);
+    if (!gate.passed) {
+      return reply.status(422).send({ error: 'quality_gate_failed', qualityGate: gate });
+    }
+    const decision = ctx.policyEngine.evaluate('publish_post', {
+      tenantId: DEFAULT_TENANT_ID,
+      grantedScopes: ctx.grantedScopes,
+      autonomy: ctx.autonomy,
+    });
+    if (decision.verdict === 'block') {
+      return reply.status(422).send({ error: 'policy_blocked', message: decision.reasons.join(' ') });
+    }
+    if (decision.verdict === 'human_review' && !parsed.data.humanApproved) {
+      return reply.status(403).send({
+        error: 'approval_required',
+        message: 'Publicar requiere aprobación humana según la configuración de autonomía.',
+      });
+    }
+
+    publishing.add(id);
+    const instagram = ctx.instagram;
+    const finalMedia = media;
+    setImmediate(async () => {
+      try {
+        const result = await publishPost(instagram, ctx.policyEngine, {
+          piece,
+          brand,
+          media: finalMedia,
+          humanApproved: parsed.data.humanApproved,
+          policyContext: {
+            tenantId: DEFAULT_TENANT_ID,
+            grantedScopes: ctx.grantedScopes,
+            autonomy: ctx.autonomy,
+          },
+        });
+        await ctx.store.saveContent(result.piece);
+        await ctx.logActivity({
+          actor: 'orquestador',
+          kind: 'action',
+          summary: `Publiqué "${piece.hook || piece.topic}" en Instagram.`,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'error desconocido';
+        await ctx.logActivity({
+          actor: 'orquestador',
+          kind: 'alert',
+          summary: `No pude publicar "${piece.hook || piece.topic}": ${message}`,
+        });
+      } finally {
+        publishing.delete(id);
+      }
+    });
+
+    return reply.status(202).send({
+      started: true,
+      message: 'Publicando en Instagram; el estado de la pieza cambiará al terminar.',
+    });
   });
 }
+
+/** Piezas con publicación en curso (candado en memoria del proceso). */
+const publishing = new Set<string>();

@@ -35,7 +35,7 @@ interface Piece {
   };
 }
 
-const EDITABLE_STATUSES = new Set(['idea', 'draft', 'in_review', 'rejected']);
+const EDITABLE_STATUSES = new Set(['idea', 'draft', 'in_review', 'rejected', 'approved']);
 
 interface Health {
   status: string;
@@ -469,10 +469,20 @@ export default function Dashboard() {
         body: JSON.stringify({ humanApproved: true }),
       });
       const data = await res.json();
-      setNotice(res.ok ? '¡Publicado en Instagram!' : `No se publicó: ${data.message ?? data.error}`);
+      if (res.status === 202) {
+        setNotice('Publicando en Instagram (los carruseles tardan varios minutos); el estado cambiará solo.');
+      } else if (res.status === 422 && data.error === 'quality_gate_failed') {
+        const failed = (data.qualityGate?.results ?? [])
+          .filter((r: { passed: boolean }) => !r.passed)
+          .map((r: { check: string; detail?: string }) => r.detail ?? r.check);
+        setGateFails((g) => ({ ...g, [pieceId]: failed }));
+        setNotice('El control de calidad detuvo la publicación; corrige lo señalado.');
+      } else {
+        setNotice(`No se publicó: ${data.message ?? data.error}`);
+      }
       await refresh();
     } catch {
-      setNotice('Error publicando la pieza.');
+      setNotice('Error de conexión al pedir la publicación.');
     } finally {
       setBusyPiece(null);
     }
@@ -749,6 +759,18 @@ export default function Dashboard() {
                               >
                                 Guardar cambios
                               </button>
+                              <span
+                                className="muted metric"
+                                style={
+                                  [edit.hook, edit.body, edit.cta].filter(Boolean).join('\n\n')
+                                    .length > 2200
+                                    ? { color: 'var(--danger)' }
+                                    : undefined
+                                }
+                              >
+                                {[edit.hook, edit.body, edit.cta].filter(Boolean).join('\n\n').length}
+                                {' / 2200 caracteres del caption'}
+                              </span>
                             </div>
                           </>
                         ) : (
