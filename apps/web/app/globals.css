@@ -35,7 +35,15 @@
 html { height: 100%; }
 
 body {
-  background: var(--surface-base);
+  /* Fondo con la paleta del logo de Instagram (violeta→rosa→naranja→ámbar),
+     como lavado sutil para que las tarjetas blancas sigan mandando. */
+  background:
+    radial-gradient(900px 620px at 0% 0%, rgb(131 58 180 / 0.14), transparent 62%),
+    radial-gradient(820px 560px at 100% 0%, rgb(225 48 108 / 0.12), transparent 60%),
+    radial-gradient(900px 620px at 100% 100%, rgb(247 119 55 / 0.13), transparent 62%),
+    radial-gradient(1000px 700px at 0% 100%, rgb(252 175 69 / 0.16), transparent 62%),
+    var(--surface-base);
+  background-attachment: fixed;
   color: var(--text-body);
   font-family: var(--font-inter, 'Inter'), system-ui, -apple-system, sans-serif;
   font-size: 14px;
@@ -65,16 +73,22 @@ header.top .status { font-size: 13px; color: var(--text-secondary); }
 .dot.ok { background: var(--ok); }
 .dot.off { background: var(--danger); }
 
-/* Jerarquía real: trabajo (Contenido) al centro y ancho; apoyo a los lados. */
+/*
+ * Jerarquía real: tres columnas verticales verdaderas (flex), no celdas de
+ * grid con filas compartidas. El trabajo (Contenido) va ancho al centro;
+ * el apoyo se apila ordenado a los lados.
+ */
 .grid { display: grid; grid-template-columns: 1fr; gap: 16px; align-items: start; }
+.col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 @media (min-width: 1100px) {
   .grid {
-    grid-template-columns: minmax(300px, 360px) minmax(480px, 1fr) minmax(320px, 420px);
-    grid-auto-flow: dense;
+    grid-template-columns: minmax(290px, 340px) minmax(480px, 1fr) minmax(320px, 420px);
   }
-  .card.main { grid-column: 2; }
-  .card.side-left { grid-column: 1; }
-  .card.side-right { grid-column: 3; }
+  .col-main { order: 0; }
+}
+@media (max-width: 1099px) {
+  /* En una columna, el trabajo va primero. */
+  .col-main { order: -1; }
 }
 
 .card {
@@ -126,7 +140,11 @@ input, select, textarea {
   color: var(--text-primary);
   font-family: inherit;
   transition: border-color 150ms var(--ease-out);
+  max-width: 100%;
+  min-width: 0;
 }
+/* Un select suelto dentro de una tarjeta ocupa su ancho, nunca lo desborda. */
+.card > select, .card > div > select:only-child { width: 100%; }
 input:hover, select:hover, textarea:hover { border-color: var(--gold); }
 input:focus-visible, select:focus-visible, textarea:focus-visible,
 button:focus-visible, a:focus-visible {

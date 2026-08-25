@@ -518,7 +518,9 @@ export default function Dashboard() {
       {error && <div className="card" style={{ marginBottom: 16, color: 'var(--danger)' }}>{error}</div>}
 
       <div className="grid">
-        <section className="card side-left">
+        <div className="col">
+        
+<section className="card">
           <h2>Necesita tu aprobación ({approvals.length})</h2>
           {approvals.length === 0 && <p className="empty">Nada pendiente. Todo al día.</p>}
           <ul className="plain">
@@ -538,8 +540,8 @@ export default function Dashboard() {
             ))}
           </ul>
         </section>
-
-        <section className="card side-left">
+        
+<section className="card">
           <h2>Crear contenido</h2>
           <form className="gen" onSubmit={onGenerate}>
             <input name="topic" placeholder="Tema (ej. errores al importar desde China)" required minLength={3} />
@@ -565,8 +567,79 @@ export default function Dashboard() {
             </button>
           </form>
         </section>
+        
+<section className="card">
+          <h2>Autonomía del empleado</h2>
+          {!autonomy && <p className="empty">Cargando…</p>}
+          {autonomy && (
+            <>
+              <select
+                value={autonomy.mode}
+                onChange={(e) =>
+                  void updateAutonomy({ ...autonomy, mode: e.target.value as Autonomy['mode'] })
+                }
+              >
+                {(Object.keys(MODE_LABELS) as Autonomy['mode'][]).map((m) => (
+                  <option key={m} value={m}>
+                    {MODE_LABELS[m]}
+                  </option>
+                ))}
+              </select>
+              <ul className="plain" style={{ marginTop: 8 }}>
+                {CONFIGURABLE_ACTIONS.map(({ key, label }) => (
+                  <li key={key}>
+                    <label style={{ cursor: autonomy.mode === 'copilot' ? 'default' : 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        disabled={autonomy.mode === 'copilot'}
+                        checked={
+                          autonomy.mode === 'copilot' || (autonomy.requireApproval[key] ?? true)
+                        }
+                        onChange={(e) =>
+                          void updateAutonomy({
+                            ...autonomy,
+                            requireApproval: {
+                              ...autonomy.requireApproval,
+                              [key]: e.target.checked,
+                            },
+                          })
+                        }
+                      />{' '}
+                      {label}: requiere mi aprobación
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              <p className="muted">
+                Campañas pagadas, cambios de estrategia y de presupuesto siempre requieren
+                aprobación humana (no configurable).
+              </p>
+            </>
+          )}
+        </section>
+        
+<section className="card">
+          <h2>Recomendaciones del analista</h2>
+          {recommendations.length === 0 && (
+            <p className="empty">Sin recomendaciones: todo marcha según el plan.</p>
+          )}
+          <ul className="plain">
+            {recommendations.map((r) => (
+              <li key={r.id}>
+                <span className={`badge ${r.priority === 'alta' ? 'rejected' : r.priority === 'media' ? 'pending' : 'draft'}`}>
+                  {r.priority}
+                </span>
+                <strong>{r.title}</strong>
+                <div className="muted">{r.detail}</div>
+              </li>
+            ))}
+          </ul>
+        </section>
+        </div>
 
-        <section className="card main">
+        <div className="col col-main">
+        
+<section className="card">
           <h2>Contenido</h2>
           {notice && <p className="notice">{notice}</p>}
           {content.length === 0 && <p className="empty">Aún no hay piezas. Genera la primera.</p>}
@@ -824,8 +897,11 @@ export default function Dashboard() {
             ))}
           </ul>
         </section>
+        </div>
 
-        <section className="card side-right">
+        <div className="col">
+        
+<section className="card">
           <h2>Próximamente · Calendario</h2>
           {calendar.length === 0 && (
             <p className="empty">Sin publicaciones planificadas para los próximos días.</p>
@@ -963,76 +1039,8 @@ export default function Dashboard() {
             )}
           </div>
         </section>
-
-        <section className="card side-left">
-          <h2>Recomendaciones del analista</h2>
-          {recommendations.length === 0 && (
-            <p className="empty">Sin recomendaciones: todo marcha según el plan.</p>
-          )}
-          <ul className="plain">
-            {recommendations.map((r) => (
-              <li key={r.id}>
-                <span className={`badge ${r.priority === 'alta' ? 'rejected' : r.priority === 'media' ? 'pending' : 'draft'}`}>
-                  {r.priority}
-                </span>
-                <strong>{r.title}</strong>
-                <div className="muted">{r.detail}</div>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="card side-left">
-          <h2>Autonomía del empleado</h2>
-          {!autonomy && <p className="empty">Cargando…</p>}
-          {autonomy && (
-            <>
-              <select
-                value={autonomy.mode}
-                onChange={(e) =>
-                  void updateAutonomy({ ...autonomy, mode: e.target.value as Autonomy['mode'] })
-                }
-              >
-                {(Object.keys(MODE_LABELS) as Autonomy['mode'][]).map((m) => (
-                  <option key={m} value={m}>
-                    {MODE_LABELS[m]}
-                  </option>
-                ))}
-              </select>
-              <ul className="plain" style={{ marginTop: 8 }}>
-                {CONFIGURABLE_ACTIONS.map(({ key, label }) => (
-                  <li key={key}>
-                    <label style={{ cursor: autonomy.mode === 'copilot' ? 'default' : 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        disabled={autonomy.mode === 'copilot'}
-                        checked={
-                          autonomy.mode === 'copilot' || (autonomy.requireApproval[key] ?? true)
-                        }
-                        onChange={(e) =>
-                          void updateAutonomy({
-                            ...autonomy,
-                            requireApproval: {
-                              ...autonomy.requireApproval,
-                              [key]: e.target.checked,
-                            },
-                          })
-                        }
-                      />{' '}
-                      {label}: requiere mi aprobación
-                    </label>
-                  </li>
-                ))}
-              </ul>
-              <p className="muted">
-                Campañas pagadas, cambios de estrategia y de presupuesto siempre requieren
-                aprobación humana (no configurable).
-              </p>
-            </>
-          )}
-        </section>
-
-        <section className="card side-right">
+        
+<section className="card">
           <h2>Rendimiento</h2>
           {!analytics?.connected && <p className="empty">Conecta Instagram para ver métricas.</p>}
           {analytics?.connected && analytics.posts.length === 0 && (
@@ -1069,8 +1077,8 @@ export default function Dashboard() {
             </p>
           )}
         </section>
-
-        <section className="card side-right">
+        
+<section className="card">
           <h2>Bitácora del empleado</h2>
           {activity.length === 0 && <p className="empty">Sin actividad todavía.</p>}
           <ul className="plain">
@@ -1084,6 +1092,8 @@ export default function Dashboard() {
             ))}
           </ul>
         </section>
+        </div>
+      
       </div>
     </div>
   );
