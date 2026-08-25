@@ -31,6 +31,11 @@ export async function generateCaption(
     brandContextForPrompt(input.brand),
     'Reglas: no inventes leyes ni artículos; no prometas resultados; el contenido educativo lleva el disclaimer de la marca al final del cuerpo.',
     'El caption completo (hook + cuerpo + CTA) debe quedar por debajo de 1.800 caracteres (límite de Instagram: 2.200). En carruseles el cuerpo es un resumen: los puntos detallados van en las láminas.',
+    'Hook (primera línea): debe leerse solo y dar ganas de seguir. Usa una fórmula concreta — curiosidad ("la razón real por la que..."), dato o cifra específica, error común + corrección ("deja de hacer X, haz esto"), o una pregunta directa sobre el dolor de la audiencia. Nunca abras con un saludo genérico ni con "en el mundo de hoy".',
+    'Especificidad: prefiere el dato concreto sobre la afirmación vaga (ej. "3 errores que retrasan tu importación semanas" en vez de "cuidado con los errores"). El costo real de NO actuar (tiempo, dinero, mercancía retenida) convence más que solo listar beneficios — pero ese riesgo debe ser real y verificable con la información de marca, nunca inventado ni exagerado.',
+    'CTA: un verbo de acción concreto + qué obtiene el lector (ej. "Guarda esta guía", "Escríbenos tu caso"). Nunca un CTA genérico como "más información".',
+    'Una sola idea por pieza: no mezcles varios temas o llamados a la acción en el mismo caption.',
+    'Escribe en prosa natural, no en tono de IA: sin rayas largas (—), sin "es importante destacar/mencionar", sin relleno tipo "en resumen" o "sin duda alguna". Ve directo al punto.',
     input.rejectionFeedback?.length
       ? `Preferencias aprendidas — el cliente rechazó piezas anteriores por estos motivos, evítalos: ${input.rejectionFeedback.join(' | ')}`
       : '',

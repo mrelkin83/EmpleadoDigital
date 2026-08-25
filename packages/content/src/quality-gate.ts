@@ -23,6 +23,25 @@ export interface QualityGateOptions {
   recentPieces?: Pick<ContentPiece, 'topic' | 'hook'>[];
 }
 
+/**
+ * Frases y estructuras típicas de "AI slop" en español. Un caption que suena a IA
+ * pierde autenticidad justo en el canal (Instagram) donde eso más se nota.
+ */
+const AI_SLOP_PATTERNS: { label: string; regex: RegExp }[] = [
+  { label: 'raya larga (—)', regex: /—/ },
+  { label: '"es importante destacar/mencionar/señalar/resaltar"', regex: /es importante (destacar|mencionar|señalar|resaltar)/i },
+  { label: '"cabe destacar/mencionar/resaltar/señalar"', regex: /cabe (destacar|mencionar|resaltar|señalar)/i },
+  { label: '"en el mundo actual/de hoy"', regex: /en el mundo (actual|de hoy)/i },
+  { label: '"en un mundo cada vez más / donde"', regex: /en un mundo (cada vez más|donde)/i },
+  { label: '"no es/se trata de X, sino de Y" (contraste binario)', regex: /no (es|se trata) .{3,60},\s*(sino|es)\s/i },
+  { label: '"a fin de cuentas" / "al final del día"', regex: /(a fin de cuentas|al final del día)/i },
+  { label: '"sin duda alguna"', regex: /sin duda alguna/i },
+  { label: '"en resumen" / "en pocas palabras"', regex: /(en resumen|en pocas palabras)[:,]/i },
+  { label: '"profundicemos" / "adentrémonos"', regex: /(profundicemos|adentrémonos)/i },
+  { label: '"cambio de juego" (game changer)', regex: /cambio de juego/i },
+  { label: '"un sinfín de"', regex: /un sinfín de/i },
+];
+
 export function runQualityGate(
   piece: ContentPiece,
   brand: BrandMemory,
@@ -72,6 +91,14 @@ export function runQualityGate(
     check: 'duplication',
     passed: !duplicated,
     ...(duplicated ? { detail: 'Contenido duplicado respecto a piezas recientes.' } : {}),
+  });
+
+  // AI slop: frases y estructuras que delatan texto generado por IA sin edición.
+  const slopMatches = AI_SLOP_PATTERNS.filter((p) => p.regex.test(fullText)).map((p) => p.label);
+  results.push({
+    check: 'no_ai_slop',
+    passed: slopMatches.length === 0,
+    ...(slopMatches.length ? { detail: `Suena a texto generado por IA sin editar: ${slopMatches.join(', ')}` } : {}),
   });
 
   // Mock guard (spec §57): contenido marcado como simulado jamás avanza hacia publicación.

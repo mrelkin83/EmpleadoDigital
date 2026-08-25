@@ -64,6 +64,29 @@ describe('Quality Gate', () => {
     const report = runQualityGate(piece({ pillar: 'Chismes' }), brand);
     expect(report.results.find((r) => r.check === 'valid_pillar')?.passed).toBe(false);
   });
+
+  it('rechaza rayas largas (em dash), típicas de texto generado por IA sin editar', () => {
+    const report = runQualityGate(
+      piece({ body: `Muchos importadores fallan — y no lo notan a tiempo. ${DISCLAIMER}` }),
+      brand,
+    );
+    expect(report.results.find((r) => r.check === 'no_ai_slop')?.passed).toBe(false);
+  });
+
+  it('rechaza frases de relleno típicas de IA ("es importante destacar")', () => {
+    const report = runQualityGate(
+      piece({ body: `Es importante destacar que muchos errores se pueden evitar. ${DISCLAIMER}` }),
+      brand,
+    );
+    const check = report.results.find((r) => r.check === 'no_ai_slop');
+    expect(check?.passed).toBe(false);
+    expect(check?.detail).toContain('destacar');
+  });
+
+  it('no marca como slop un caption normal sin esas frases', () => {
+    const report = runQualityGate(piece(), brand);
+    expect(report.results.find((r) => r.check === 'no_ai_slop')?.passed).toBe(true);
+  });
 });
 
 describe('flujo de estados de contenido', () => {

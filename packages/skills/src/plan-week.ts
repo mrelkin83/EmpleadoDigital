@@ -103,6 +103,11 @@ async function suggestTopics(
       system: [
         'Eres el content planner de un empleado digital de marketing.',
         brandContextForPrompt(input.brand),
+        'Cada tema debe calzar con la intención de su etapa del funnel:',
+        '- TOFU: gancho amplio para quien todavía no conoce el problema — un mito común, un error caro, un dato sorprendente sobre los dolores de la audiencia.',
+        '- MOFU: contenido educativo que construye confianza — cómo funciona algo, una comparación, un caso típico resuelto paso a paso.',
+        '- BOFU: tema específico del pilar de conversión que responde una objeción real de la audiencia o un caso concreto que empuje a escribir.',
+        'Evita repetir el mismo ángulo entre temas de una misma semana.',
         `Responde SOLO con un array JSON de ${funnels.length} strings (un tema concreto por publicación, en el orden dado).`,
       ].join('\n'),
       prompt: `Propón temas para la semana que inicia ${input.weekStart}. Etapas del funnel en orden: ${funnels.join(', ')}. Cada tema: una sola frase concisa (máximo 15 palabras), sin explicaciones entre paréntesis, sin comillas, sin anteponer la etapa ni el pilar.`,
