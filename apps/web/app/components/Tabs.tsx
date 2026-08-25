@@ -7,6 +7,7 @@ const TABS: Array<{ href: string; label: string }> = [
   { href: '/', label: 'Panel' },
   { href: '/bitacora', label: 'Bitácora' },
   { href: '/marca', label: 'Configurar marca' },
+  { href: '/rol', label: 'Rol del empleado' },
   { href: '/reporte', label: 'Reporte semanal' },
 ];
 

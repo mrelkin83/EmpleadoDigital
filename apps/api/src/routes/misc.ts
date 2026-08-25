@@ -31,6 +31,7 @@ export function registerMiscRoutes(app: FastifyInstance, ctx: AppContext): void 
     .object({
       brandName: z.string().min(1).max(120),
       employeeName: z.string().max(120),
+      aiRole: z.string().max(4000),
       description: z.string().max(3000),
       sector: shortStr,
       niche: shortStr,
@@ -147,6 +148,12 @@ export function registerMiscRoutes(app: FastifyInstance, ctx: AppContext): void 
       summary: `Nivel de autonomía actualizado a "${parsed.data.mode}".`,
     });
     return ctx.autonomy;
+  });
+
+  // Plantilla sugerida del rol del empleado (fuente única: packages/brand).
+  app.get('/api/brand/role-template', async () => {
+    const { DEFAULT_AI_ROLE } = await import('@empleado/brand');
+    return { template: DEFAULT_AI_ROLE };
   });
 
   // Logo de la marca (PNG con transparencia recomendado): se estampa en las

@@ -1,6 +1,21 @@
 import type { BrandMemory } from './brand-memory.js';
 
 /**
+ * Rol/persona por defecto del empleado de IA: senior en marketing digital,
+ * creación y administración de contenido. Editable por el usuario en el
+ * panel (PUT /api/brand → aiRole); esto es solo el punto de partida.
+ */
+export const DEFAULT_AI_ROLE = `Eres un Senior de Marketing Digital con más de 10 años de experiencia en creación y administración de contenido para redes sociales: estratega, copywriter y director creativo en una sola persona. Antes de entregar cualquier pieza, la revisas con criterio senior, no de junior que solo cumple el formato.
+
+Exigencias que SIEMPRE cumples:
+- El gancho (hook) detiene el scroll en los primeros 3 segundos: específico, con tensión o curiosidad real, nunca clickbait vacío.
+- El copy suena humano, no genérico ni "de IA": frases cortas, ritmo variado, cero relleno ni frases de plantilla.
+- Cada pieza tiene una sola idea central y un objetivo claro (educar, generar confianza o convertir); nunca mezclas varios mensajes en un post.
+- El CTA es concreto y accionable: dice qué hacer, no invita vagamente.
+- Priorizas claridad sobre creatividad: si hay que elegir entre las dos, gana la claridad.
+- Respetas sin excepción el tono, las palabras prohibidas y los disclaimers de la marca; nunca inventas cifras, leyes ni promesas que la marca no pueda sostener.`;
+
+/**
  * Perfil del caso piloto (spec §5): abogado colombiano de derecho aduanero.
  * Es CONFIGURACIÓN de ejemplo/seed — el producto no se codifica para abogados (spec §5-6).
  */
@@ -8,6 +23,7 @@ export function buildPilotBrandMemory(tenantId: string): BrandMemory {
   return {
     tenantId,
     brandName: 'Asesoría Aduanera',
+    aiRole: DEFAULT_AI_ROLE,
     description:
       'Profesional colombiano especializado en derecho aduanero, comercio exterior, importaciones y procesos ante la DIAN.',
     sector: 'Servicios jurídicos',

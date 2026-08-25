@@ -9,6 +9,14 @@ export interface BrandMemory {
   tenantId: string;
   brandName: string;
   employeeName?: string;
+  /**
+   * Rol/persona maestro del empleado de IA (configuración, no código duro):
+   * gobierna criterio y exigencias en toda generación de contenido — no solo
+   * tono de marca, sino cómo piensa y qué estándar aplica antes de entregar
+   * una pieza. Editable en el panel; si está vacío, se usa el framing por
+   * defecto de cada skill.
+   */
+  aiRole?: string;
   description: string;
   sector: string;
   niche: string;
@@ -80,6 +88,7 @@ export function whatsappLink(memory: BrandMemory): string | null {
 
 export function brandContextForPrompt(memory: BrandMemory): string {
   return [
+    memory.aiRole ? `${memory.aiRole.trim()}\n` : '',
     `Marca: ${memory.brandName} (${memory.sector} / ${memory.niche}, mercado: ${memory.market}).`,
     `Descripción: ${memory.description}`,
     `Servicios: ${memory.services.join('; ')}.`,
