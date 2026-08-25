@@ -44,8 +44,9 @@ Sin `DATABASE_URL` la API usa almacenamiento en memoria (solo desarrollo). Sin `
 ## Verificación
 
 ```bash
-npm test           # 56 tests (policy engine, task router, quality gate, webhooks, API)
+npm test           # 79 tests (policy engine, task router, quality gate, webhooks, API)
 npm run typecheck  # TypeScript strict en todo el monorepo
+npm run lint        # ESLint flat config
 ```
 
 ## Principios no negociables
@@ -55,9 +56,10 @@ npm run typecheck  # TypeScript strict en todo el monorepo
 - **Multi-tenant desde el esquema.** El MVP opera con un tenant, sin mezclar datos jamás.
 - **Sin secretos en el código.** Tokens y claves solo por variables de entorno.
 
-## Estado (2026-08-21)
+## Estado (2026-08-25)
 
-- ✅ Fase 0: monorepo, tipado estricto, tests, esquema de base de datos, observabilidad básica.
-- ✅ Fase 1 (parcial): brand memory (seed piloto), generación de contenido con Quality Gate, flujo de aprobación, conector de publicación oficial, webhooks con pipeline de comentarios gobernado.
-- ✅ OAuth de Instagram (Business Login) con state anti-CSRF, tokens cifrados en reposo (AES-256-GCM), refresh automático y validación de scopes. Registro de costes de IA persistido en PostgreSQL.
-- ⏳ Pendiente: validación E2E del OAuth con una app real de Meta, analytics con insights, calendario UI, ESLint/CI, más proveedores IA. Ver `docs/DECISIONES.md`.
+Estado detallado y pendientes actualizados: **[docs/ESTADO.md](./docs/ESTADO.md)**. Historial de decisiones técnicas: **[docs/DECISIONES.md](./docs/DECISIONES.md)**.
+
+- ✅ Fases 0-5 del roadmap construidas: OAuth real de Instagram, publicación oficial (imagen/carrusel/reel) verificada con la cuenta del piloto, generación de contenido con IA (Anthropic + Gemini), calendario editorial, orquestador con publicación programada autónoma, Community Manager (pipeline listo, a la espera de que Meta publique la app), analytics, recomendaciones del analista y rol/persona configurable del empleado.
+- ✅ Generación de material gráfico con IA: fotografía editorial (Gemini), carruseles con portada + láminas infográficas, video corto (Veo) — todos con el gancho de la pieza y la marca (logo, colores, contacto) estampados automáticamente.
+- ⏳ Pendiente: autenticación del dashboard, despliegue con dominio propio (Docker), fases 6-7 (SaaS multi-tenant, multicanal).

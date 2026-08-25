@@ -162,6 +162,10 @@ export interface GeneratedImage {
 /** Dirección de arte compartida para las piezas fotográficas IA. */
 function artDirection(brand: BrandMemory): string {
   return [
+    // El rol/persona configurable (aiRole) también gobierna la dirección de
+    // arte visual, no solo el copy — así el usuario ajusta ambos desde un
+    // único lugar (pestaña "Rol del empleado").
+    brand.aiRole ? brand.aiRole.trim() : '',
     `Contexto del negocio: ${brand.niche} en ${brand.market}.`,
     'Dirección de arte: fotografía editorial premium tipo revista de negocios,',
     'lente 50mm, profundidad de campo corta, iluminación cinematográfica cálida,',
