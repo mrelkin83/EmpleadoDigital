@@ -164,6 +164,42 @@ function baseBackground(pal: Palette): string {
   <rect x="24" y="24" width="${W - 48}" height="${H - 48}" fill="none" stroke="${pal.accent}" stroke-width="1.5" opacity="0.3"/>`;
 }
 
+/** Envuelve texto por palabras sin cortar nunca contenido (sin elipsis). */
+function wrapNoTruncate(text: string, maxChars: number): string[] {
+  const words = text.split(/\s+/);
+  const lines: string[] = [];
+  let current = '';
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (candidate.length > maxChars && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+/**
+ * Elige el tamaño de letra más grande que permita mostrar el hook completo
+ * — antes se limitaba a 4 líneas fijas y se cortaba con elipsis a mitad de
+ * frase en hooks largos (habituales en pilares como Casos o Educación).
+ * Baja el tamaño en escalones hasta que entra; en el último escalón se
+ * queda con las líneas que hagan falta, pero nunca recorta el texto.
+ */
+function wrapHook(hook: string, w: number): { lines: string[]; fontSize: number } {
+  const availableWidth = w - 120;
+  const sizes = [52, 46, 40, 36, 32, 28];
+  for (const fontSize of sizes) {
+    const maxChars = Math.floor(availableWidth / (fontSize * 0.58));
+    const lines = wrapNoTruncate(hook, maxChars);
+    if (lines.length <= 4 || fontSize === sizes[sizes.length - 1]) return { lines, fontSize };
+  }
+  return { lines: [hook], fontSize: sizes[sizes.length - 1]! };
+}
+
 /**
  * Banner superior con el gancho (hook) de la pieza: scrim + pilar + titular
  * envuelto. Toda pieza generada (imagen IA, portada de carrusel, video) debe
@@ -171,8 +207,7 @@ function baseBackground(pal: Palette): string {
  * detiene el scroll. Se compone por plantilla, nunca lo escribe la IA.
  */
 function hookBannerSvg(brand: BrandMemory, pal: Palette, pillar: string, hook: string, w = W): string {
-  const lines = wrap(hook, Math.round(w / 42), 4);
-  const fontSize = lines.length <= 2 ? 52 : lines.length === 3 ? 44 : 38;
+  const { lines, fontSize } = wrapHook(hook, w);
   const lineHeight = Math.round(fontSize * 1.25);
   const badgeY = 26;
   const textTop = 154;
