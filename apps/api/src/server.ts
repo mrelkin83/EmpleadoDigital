@@ -1,4 +1,5 @@
 import Fastify, { type FastifyInstance } from 'fastify';
+import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
@@ -8,12 +9,33 @@ import type { AppContext } from './context.js';
 
 /** Carpeta donde se guarda el material subido (imágenes/videos); servida en /media/. */
 export const UPLOADS_DIR = path.resolve(process.cwd(), 'uploads');
+import { authenticatedUser, registerAccountRoutes } from './routes/account.js';
 import { registerAnalyticsRoutes } from './routes/analytics.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerCalendarRoutes } from './routes/calendar.js';
 import { registerContentRoutes } from './routes/content.js';
 import { registerMiscRoutes } from './routes/misc.js';
 import { registerWebhookRoutes } from './routes/webhooks.js';
+
+/**
+ * Rutas alcanzables SIN sesión del panel: lo que Meta necesita golpear desde
+ * fuera (webhooks, material público, callback de OAuth) y el propio login.
+ */
+// /auth/instagram/login (iniciar conexión) SÍ requiere sesión: conectar una
+// cuenta de Instagram es una acción sensible, no algo que deba poder disparar
+// cualquier visitante. /callback queda público porque Meta redirige aquí.
+const PUBLIC_PATH_PREFIXES = ['/webhooks', '/media', '/auth/instagram/callback', '/health'];
+const PUBLIC_API_PATHS = new Set([
+  '/api/account/status',
+  '/api/account/setup',
+  '/api/account/login',
+  '/api/account/reset-password',
+]);
+
+function isPublicPath(pathname: string): boolean {
+  if (PUBLIC_API_PATHS.has(pathname)) return true;
+  return PUBLIC_PATH_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
 
 /**
  * Construcción del servidor HTTP. Separada del bootstrap para poder testearla
@@ -53,6 +75,19 @@ export async function buildServer(ctx: AppContext): Promise<FastifyInstance> {
   mkdirSync(UPLOADS_DIR, { recursive: true });
   await app.register(fastifyStatic, { root: UPLOADS_DIR, prefix: '/media/' });
 
+  // Login del panel (cookie de sesión httpOnly). Guardián global: todo lo que
+  // no esté en la lista pública exige sesión válida, incluida /api/* completa.
+  await app.register(cookie);
+  app.addHook('onRequest', async (request, reply) => {
+    const pathname = request.url.split('?')[0] ?? request.url;
+    if (isPublicPath(pathname)) return;
+    const user = await authenticatedUser(ctx, request);
+    if (!user) {
+      reply.status(401).send({ error: 'unauthenticated', message: 'Inicia sesión para continuar.' });
+    }
+  });
+
+  registerAccountRoutes(app, ctx);
   registerMiscRoutes(app, ctx);
   registerAnalyticsRoutes(app, ctx);
   registerAuthRoutes(app, ctx);

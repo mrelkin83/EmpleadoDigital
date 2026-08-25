@@ -11,3 +11,6 @@ Thumbs.db
 
 # Material subido (imagenes/videos de piezas)
 uploads/
+
+# Artefactos de sesiones de playwright-cli (snapshots/logs de depuracion)
+.playwright-cli/

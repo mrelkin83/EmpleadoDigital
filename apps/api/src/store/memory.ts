@@ -3,7 +3,15 @@ import type { BrandMemory } from '@empleado/brand';
 import type { CalendarSlot, ContentPiece } from '@empleado/content';
 import type { ActivityEntry, AutonomyConfig } from '@empleado/shared';
 import type { KeywordRule } from '@empleado/social';
-import type { ApprovalRequest, ContentFeedback, Lead, Store, StoredSocialAccount } from './store.js';
+import type {
+  ApprovalRequest,
+  ContentFeedback,
+  Lead,
+  Store,
+  StoredSession,
+  StoredSocialAccount,
+  StoredUser,
+} from './store.js';
 
 /** Almacenamiento en memoria para desarrollo sin base de datos. No persistente. */
 export class MemoryStore implements Store {
@@ -15,6 +23,8 @@ export class MemoryStore implements Store {
   private socialAccounts = new Map<string, StoredSocialAccount>();
   private processedComments = new Set<string>();
   private autonomyConfigs = new Map<string, AutonomyConfig>();
+  private users = new Map<string, StoredUser>();
+  private sessions = new Map<string, StoredSession>();
   private feedback: ContentFeedback[] = [];
   private keywordRules = new Map<string, KeywordRule[]>();
 
@@ -148,6 +158,48 @@ export class MemoryStore implements Store {
       stats.set(f.pillar, s);
     }
     return [...stats.entries()].map(([pillar, s]) => ({ pillar, ...s }));
+  }
+
+  async getUserByEmail(tenantId: string, email: string): Promise<StoredUser | null> {
+    return (
+      [...this.users.values()].find(
+        (u) => u.tenantId === tenantId && u.email.toLowerCase() === email.toLowerCase(),
+      ) ?? null
+    );
+  }
+
+  async getUserById(id: string): Promise<StoredUser | null> {
+    return this.users.get(id) ?? null;
+  }
+
+  async getAnyUser(tenantId: string): Promise<StoredUser | null> {
+    return [...this.users.values()].find((u) => u.tenantId === tenantId) ?? null;
+  }
+
+  async createUser(user: StoredUser): Promise<void> {
+    this.users.set(user.id, user);
+  }
+
+  async updateUser(user: StoredUser): Promise<void> {
+    this.users.set(user.id, user);
+  }
+
+  async createSession(session: StoredSession): Promise<void> {
+    this.sessions.set(session.id, session);
+  }
+
+  async getSession(id: string): Promise<StoredSession | null> {
+    const session = this.sessions.get(id);
+    if (!session) return null;
+    if (session.expiresAt.getTime() < Date.now()) {
+      this.sessions.delete(id);
+      return null;
+    }
+    return session;
+  }
+
+  async deleteSession(id: string): Promise<void> {
+    this.sessions.delete(id);
   }
 
   async getAutonomy(tenantId: string): Promise<AutonomyConfig | null> {

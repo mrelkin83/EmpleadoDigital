@@ -43,6 +43,25 @@ export interface ContentFeedback {
   createdAt: Date;
 }
 
+/** Usuario del dashboard (single-admin por tenant hoy; el esquema ya soporta más). */
+export interface StoredUser {
+  id: string;
+  tenantId: string;
+  email: string;
+  name: string;
+  passwordHash: string;
+  recoveryCodeHash: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface StoredSession {
+  id: string;
+  userId: string;
+  createdAt: Date;
+  expiresAt: Date;
+}
+
 export interface StoredSocialAccount {
   id: string;
   tenantId: string;
@@ -97,6 +116,18 @@ export interface Store {
   listRecentRejectionReasons(tenantId: string, limit?: number): Promise<string[]>;
   /** Aprobados/rechazados por pilar (aprendizaje de preferencias, Fase 5). */
   feedbackStatsByPillar(tenantId: string): Promise<Array<{ pillar: string; approved: number; rejected: number }>>;
+
+  // --- Cuentas de usuario del dashboard (login) ---
+  getUserByEmail(tenantId: string, email: string): Promise<StoredUser | null>;
+  getUserById(id: string): Promise<StoredUser | null>;
+  /** Cualquier usuario del tenant; el MVP es single-admin (spec §32: RBAC pendiente para SaaS). */
+  getAnyUser(tenantId: string): Promise<StoredUser | null>;
+  createUser(user: StoredUser): Promise<void>;
+  updateUser(user: StoredUser): Promise<void>;
+
+  createSession(session: StoredSession): Promise<void>;
+  getSession(id: string): Promise<StoredSession | null>;
+  deleteSession(id: string): Promise<void>;
 
   close(): Promise<void>;
 }

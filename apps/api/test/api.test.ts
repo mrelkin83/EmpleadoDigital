@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, InjectOptions } from 'fastify';
 import { computeSignature } from '@empleado/social';
 
 process.env['NODE_ENV'] = 'test';
@@ -10,28 +10,44 @@ const { buildContext } = await import('../src/context.js');
 const { buildServer } = await import('../src/server.js');
 
 let app: FastifyInstance;
+let sessionCookie: string;
 
 beforeAll(async () => {
   const ctx = await buildContext();
   app = await buildServer(ctx);
   await app.ready();
+
+  // Cuenta + sesión de prueba: el guardián global exige login en toda la API.
+  const setup = await app.inject({
+    method: 'POST',
+    url: '/api/account/setup',
+    payload: { name: 'Test', email: 'test@example.com', password: 'testpass123' },
+  });
+  const raw = setup.headers['set-cookie'];
+  const setCookie = Array.isArray(raw) ? raw[0] : raw;
+  sessionCookie = setCookie!.split(';')[0]!;
 });
+
+/** app.inject con la cookie de sesión de pruebas ya adjunta. */
+function inject(opts: InjectOptions) {
+  return app.inject({ ...opts, headers: { ...opts.headers, cookie: sessionCookie } });
+}
 
 describe('API', () => {
   it('GET /health responde ok', async () => {
-    const res = await app.inject({ method: 'GET', url: '/health' });
+    const res = await inject({ method: 'GET', url: '/health' });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ status: 'ok', instagramConnected: false });
   });
 
   it('GET /api/analytics sin Instagram conectado responde vacío y sin inventar datos', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/analytics' });
+    const res = await inject({ method: 'GET', url: '/api/analytics' });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ connected: false, posts: [], totals: {} });
   });
 
   it('programar exige pieza aprobada con imagen y fecha futura', async () => {
-    const gen = await app.inject({
+    const gen = await inject({
       method: 'POST',
       url: '/api/content/generate',
       payload: { pillar: 'Educación', funnel: 'TOFU', topic: 'tema para programar', format: 'image' },
@@ -39,7 +55,7 @@ describe('API', () => {
     const pieceId = gen.json().piece.id;
 
     // draft sin aprobar → transición inválida
-    const notApproved = await app.inject({
+    const notApproved = await inject({
       method: 'POST',
       url: `/api/content/${pieceId}/schedule`,
       payload: { scheduledAt: new Date(Date.now() + 3600_000).toISOString() },
@@ -47,7 +63,7 @@ describe('API', () => {
     expect(notApproved.statusCode).toBe(409);
 
     // cancelar algo no programado → 409
-    const notScheduled = await app.inject({
+    const notScheduled = await inject({
       method: 'POST',
       url: `/api/content/${pieceId}/unschedule`,
     });
@@ -55,7 +71,7 @@ describe('API', () => {
   });
 
   it('GET /api/recommendations produce recomendaciones deterministas del analista', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/recommendations' });
+    const res = await inject({ method: 'GET', url: '/api/recommendations' });
     expect(res.statusCode).toBe(200);
     const { recommendations } = res.json();
     expect(Array.isArray(recommendations)).toBe(true);
@@ -66,13 +82,13 @@ describe('API', () => {
   });
 
   it('GET /api/brand devuelve la Brand Memory del piloto (seed)', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/brand' });
+    const res = await inject({ method: 'GET', url: '/api/brand' });
     expect(res.statusCode).toBe(200);
     expect(res.json().niche).toContain('aduanero');
   });
 
   it('POST /api/content/generate crea un borrador con Quality Gate', async () => {
-    const res = await app.inject({
+    const res = await inject({
       method: 'POST',
       url: '/api/content/generate',
       payload: {
@@ -93,7 +109,7 @@ describe('API', () => {
   });
 
   it('rechaza payloads inválidos en generate', async () => {
-    const res = await app.inject({
+    const res = await inject({
       method: 'POST',
       url: '/api/content/generate',
       payload: { pillar: '', funnel: 'XXX', topic: 'x', format: 'nope' },
@@ -102,13 +118,13 @@ describe('API', () => {
   });
 
   it('publicar sin Instagram conectado devuelve 409 con mensaje claro', async () => {
-    const gen = await app.inject({
+    const gen = await inject({
       method: 'POST',
       url: '/api/content/generate',
       payload: { pillar: 'Educación', funnel: 'TOFU', topic: 'tema', format: 'image' },
     });
     const pieceId = gen.json().piece.id;
-    const res = await app.inject({
+    const res = await inject({
       method: 'POST',
       url: `/api/content/${pieceId}/publish`,
       payload: { imageUrl: 'https://example.com/x.jpg', humanApproved: true },
@@ -118,7 +134,7 @@ describe('API', () => {
   });
 
   it('GET /webhooks/meta resuelve el challenge con token correcto', async () => {
-    const res = await app.inject({
+    const res = await inject({
       method: 'GET',
       url: '/webhooks/meta?hub.mode=subscribe&hub.verify_token=test-verify&hub.challenge=42',
     });
@@ -127,7 +143,7 @@ describe('API', () => {
   });
 
   it('GET /webhooks/meta rechaza token incorrecto', async () => {
-    const res = await app.inject({
+    const res = await inject({
       method: 'GET',
       url: '/webhooks/meta?hub.mode=subscribe&hub.verify_token=malo&hub.challenge=42',
     });
@@ -135,7 +151,7 @@ describe('API', () => {
   });
 
   it('POST /webhooks/meta rechaza firmas inválidas', async () => {
-    const res = await app.inject({
+    const res = await inject({
       method: 'POST',
       url: '/webhooks/meta',
       payload: { object: 'instagram', entry: [] },
@@ -146,7 +162,7 @@ describe('API', () => {
 
   it('POST /webhooks/meta acepta firma válida y responde 200 inmediato', async () => {
     const payload = JSON.stringify({ object: 'instagram', entry: [] });
-    const res = await app.inject({
+    const res = await inject({
       method: 'POST',
       url: '/webhooks/meta',
       payload,
@@ -161,18 +177,18 @@ describe('API', () => {
 
   it('flujo de aprobación: pendiente → aprobar refleja el estado en la pieza', async () => {
     // Crear pieza que pase el gate: editarla a mano tras generarla.
-    const gen = await app.inject({
+    const gen = await inject({
       method: 'POST',
       url: '/api/content/generate',
       payload: { pillar: 'Prevención', funnel: 'TOFU', topic: 'errores importar', format: 'image' },
     });
     const piece = gen.json().piece;
 
-    const brandRes = await app.inject({ method: 'GET', url: '/api/brand' });
+    const brandRes = await inject({ method: 'GET', url: '/api/brand' });
     const disclaimer = brandRes.json().disclaimers[0];
 
     // Sin endpoint de edición aún: la pieza generada con mock no pasará el gate → submit devuelve 422.
-    const submit = await app.inject({ method: 'POST', url: `/api/content/${piece.id}/submit` });
+    const submit = await inject({ method: 'POST', url: `/api/content/${piece.id}/submit` });
     expect([200, 422]).toContain(submit.statusCode);
     if (submit.statusCode === 422) {
       expect(submit.json().error).toBe('quality_gate_failed');
@@ -181,7 +197,7 @@ describe('API', () => {
   });
 
   it('OAuth: login sin app de Meta configurada devuelve 503 con instrucciones', async () => {
-    const res = await app.inject({ method: 'GET', url: '/auth/instagram/login' });
+    const res = await inject({ method: 'GET', url: '/auth/instagram/login' });
     expect(res.statusCode).toBe(503);
     expect(res.json().error).toBe('oauth_not_configured');
   });
@@ -192,7 +208,7 @@ describe('API', () => {
     process.env['INSTAGRAM_APP_SECRET'] = 'secret';
     process.env['OAUTH_REDIRECT_URI'] = 'https://localhost:3001/auth/instagram/callback';
     // getEnv() está cacheado desde el arranque; este test valida el caso sin config:
-    const res = await app.inject({
+    const res = await inject({
       method: 'GET',
       url: '/auth/instagram/callback?code=abc&state=falso',
     });
@@ -200,7 +216,7 @@ describe('API', () => {
   });
 
   it('GET /api/social/status refleja el estado de conexión y scopes faltantes', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/social/status' });
+    const res = await inject({ method: 'GET', url: '/api/social/status' });
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.connected).toBe(false);
@@ -208,16 +224,16 @@ describe('API', () => {
   });
 
   it('PATCH /api/content/:id edita un borrador y devuelve el Quality Gate', async () => {
-    const gen = await app.inject({
+    const gen = await inject({
       method: 'POST',
       url: '/api/content/generate',
       payload: { pillar: 'Prevención', funnel: 'TOFU', topic: 'errores al importar', format: 'image' },
     });
     const pieceId = gen.json().piece.id;
-    const brand = (await app.inject({ method: 'GET', url: '/api/brand' })).json();
+    const brand = (await inject({ method: 'GET', url: '/api/brand' })).json();
     const disclaimer = brand.disclaimers[0];
 
-    const res = await app.inject({
+    const res = await inject({
       method: 'PATCH',
       url: `/api/content/${pieceId}`,
       payload: {
@@ -232,13 +248,13 @@ describe('API', () => {
     expect(body.qualityGate.passed).toBe(true); // editada a mano, ya pasa el gate
 
     // Y ahora sí puede enviarse a revisión.
-    const submit = await app.inject({ method: 'POST', url: `/api/content/${pieceId}/submit` });
+    const submit = await inject({ method: 'POST', url: `/api/content/${pieceId}/submit` });
     expect(submit.statusCode).toBe(200);
     expect(submit.json().piece.status).toBe('in_review');
   });
 
   it('PATCH rechaza editar piezas publicadas', async () => {
-    const res = await app.inject({
+    const res = await inject({
       method: 'PATCH',
       url: '/api/content/00000000-0000-0000-0000-00000000dead',
       payload: { hook: 'x' },
@@ -247,7 +263,7 @@ describe('API', () => {
   });
 
   it('POST /api/calendar/plan-week crea la semana y no duplica al repetir', async () => {
-    const first = await app.inject({
+    const first = await inject({
       method: 'POST',
       url: '/api/calendar/plan-week',
       payload: { weekStart: '2026-08-24' },
@@ -255,7 +271,7 @@ describe('API', () => {
     expect(first.statusCode).toBe(201);
     expect(first.json().created.length).toBe(6);
 
-    const second = await app.inject({
+    const second = await inject({
       method: 'POST',
       url: '/api/calendar/plan-week',
       payload: { weekStart: '2026-08-24' },
@@ -263,14 +279,14 @@ describe('API', () => {
     expect(second.json().created.length).toBe(0);
     expect(second.json().skipped).toBe(6);
 
-    const list = await app.inject({ method: 'GET', url: '/api/calendar?from=2026-08-24' });
+    const list = await inject({ method: 'GET', url: '/api/calendar?from=2026-08-24' });
     expect(list.json().slots.length).toBe(6);
     expect(list.json().mix.balanced).toBe(true);
   });
 
   it('flujo Fase 2: definir tema en un slot y generar borradores desde el calendario', async () => {
     // Planificar una semana distinta para no chocar con otros tests.
-    const plan = await app.inject({
+    const plan = await inject({
       method: 'POST',
       url: '/api/calendar/plan-week',
       payload: { weekStart: '2026-09-07' },
@@ -281,7 +297,7 @@ describe('API', () => {
     expect(slots.every((s) => s.topic.startsWith('Por definir'))).toBe(true);
 
     // Generar sin temas definidos: 0 generados, 6 reportados como pendientes de tema.
-    const empty = await app.inject({
+    const empty = await inject({
       method: 'POST',
       url: '/api/calendar/generate-drafts',
       payload: { weekStart: '2026-09-07' },
@@ -291,7 +307,7 @@ describe('API', () => {
     expect(empty.json().skippedUndefinedTopic.length).toBeGreaterThanOrEqual(6);
 
     // El humano define el tema de un slot...
-    const edit = await app.inject({
+    const edit = await inject({
       method: 'PATCH',
       url: `/api/calendar/${slots[0]!.id}`,
       payload: { topic: 'Checklist antes de tu primera importación desde China' },
@@ -299,7 +315,7 @@ describe('API', () => {
     expect(edit.statusCode).toBe(200);
 
     // ...y el orquestador genera solo ese borrador.
-    const gen = await app.inject({
+    const gen = await inject({
       method: 'POST',
       url: '/api/calendar/generate-drafts',
       payload: { weekStart: '2026-09-07' },
@@ -310,7 +326,7 @@ describe('API', () => {
     expect(body.generated[0].slotId).toBe(slots[0]!.id);
 
     // El slot quedó vinculado a la pieza y en content_ready.
-    const list = await app.inject({ method: 'GET', url: '/api/calendar?from=2026-09-07' });
+    const list = await inject({ method: 'GET', url: '/api/calendar?from=2026-09-07' });
     const updated = (list.json().slots as Array<{ id: string; status: string; contentPieceId?: string }>).find(
       (s) => s.id === slots[0]!.id,
     );
@@ -318,19 +334,19 @@ describe('API', () => {
     expect(updated?.contentPieceId).toBe(body.generated[0].pieceId);
 
     // Y la pieza existe como draft.
-    const piece = await app.inject({ method: 'GET', url: '/api/content' });
+    const piece = await inject({ method: 'GET', url: '/api/content' });
     expect(piece.json().some((p: { id: string }) => p.id === body.generated[0].pieceId)).toBe(true);
   });
 
   it('PUT /api/brand valida estrictamente y rechaza campos desconocidos', async () => {
-    const bad = await app.inject({
+    const bad = await inject({
       method: 'PUT',
       url: '/api/brand',
       payload: { tenantId: 'hack', campoInventado: 1 },
     });
     expect(bad.statusCode).toBe(400);
 
-    const ok = await app.inject({
+    const ok = await inject({
       method: 'PUT',
       url: '/api/brand',
       payload: { niche: 'Derecho aduanero y comercio exterior', market: 'Colombia y Latam' },
@@ -341,9 +357,9 @@ describe('API', () => {
   });
 
   it('GET /api/autonomy y PUT /api/autonomy funcionan, persisten y validan estricto', async () => {
-    const get = await app.inject({ method: 'GET', url: '/api/autonomy' });
+    const get = await inject({ method: 'GET', url: '/api/autonomy' });
     expect(get.json().mode).toBe('copilot');
-    const put = await app.inject({
+    const put = await inject({
       method: 'PUT',
       url: '/api/autonomy',
       payload: { mode: 'assisted', requireApproval: { publish_content: true } },
@@ -352,11 +368,11 @@ describe('API', () => {
     expect(put.json().mode).toBe('assisted');
 
     // Persistido en el store (sobrevive al contexto en memoria del request).
-    const again = await app.inject({ method: 'GET', url: '/api/autonomy' });
+    const again = await inject({ method: 'GET', url: '/api/autonomy' });
     expect(again.json()).toMatchObject({ mode: 'assisted', requireApproval: { publish_content: true } });
 
     // Hardening D18: claves desconocidas rechazadas.
-    const bad = await app.inject({
+    const bad = await inject({
       method: 'PUT',
       url: '/api/autonomy',
       payload: { mode: 'assisted', unknownField: true },

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import { Inter } from 'next/font/google';
+import { AuthGuard } from './components/AuthGuard';
 import { Tabs } from './components/Tabs';
 import './globals.css';
 
@@ -15,9 +16,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="es" className={inter.variable}>
       <body>
-        <div className="tabs-bar">
-          <Tabs />
-        </div>
+        <AuthGuard />
+        <Tabs />
         {children}
       </body>
     </html>

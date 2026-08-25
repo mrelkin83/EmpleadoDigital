@@ -4,7 +4,15 @@ import type { BrandMemory } from '@empleado/brand';
 import type { CalendarSlot, ContentPiece } from '@empleado/content';
 import type { ActivityEntry, AutonomyConfig } from '@empleado/shared';
 import type { KeywordRule } from '@empleado/social';
-import type { ApprovalRequest, ContentFeedback, Lead, Store, StoredSocialAccount } from './store.js';
+import type {
+  ApprovalRequest,
+  ContentFeedback,
+  Lead,
+  Store,
+  StoredSession,
+  StoredSocialAccount,
+  StoredUser,
+} from './store.js';
 
 /** Persistencia PostgreSQL. Esquema en /db/migrations (ejecutar npm run db:migrate). */
 export class PgStore implements Store {
@@ -274,6 +282,58 @@ export class PgStore implements Store {
     }));
   }
 
+  async getUserByEmail(tenantId: string, email: string): Promise<StoredUser | null> {
+    const rows = await this.sql`
+      SELECT * FROM users WHERE tenant_id = ${tenantId} AND lower(email) = lower(${email})`;
+    return rows.length ? rowToUser(rows[0]!) : null;
+  }
+
+  async getUserById(id: string): Promise<StoredUser | null> {
+    const rows = await this.sql`SELECT * FROM users WHERE id = ${id}`;
+    return rows.length ? rowToUser(rows[0]!) : null;
+  }
+
+  async getAnyUser(tenantId: string): Promise<StoredUser | null> {
+    const rows = await this.sql`
+      SELECT * FROM users WHERE tenant_id = ${tenantId} ORDER BY created_at ASC LIMIT 1`;
+    return rows.length ? rowToUser(rows[0]!) : null;
+  }
+
+  async createUser(u: StoredUser): Promise<void> {
+    await this.sql`
+      INSERT INTO users (id, tenant_id, email, name, password_hash, recovery_code_hash, created_at, updated_at)
+      VALUES (${u.id}, ${u.tenantId}, ${u.email}, ${u.name}, ${u.passwordHash}, ${u.recoveryCodeHash}, ${u.createdAt}, ${u.updatedAt})`;
+  }
+
+  async updateUser(u: StoredUser): Promise<void> {
+    await this.sql`
+      UPDATE users SET email = ${u.email}, name = ${u.name}, password_hash = ${u.passwordHash},
+        recovery_code_hash = ${u.recoveryCodeHash}, updated_at = ${u.updatedAt}
+      WHERE id = ${u.id}`;
+  }
+
+  async createSession(s: StoredSession): Promise<void> {
+    await this.sql`
+      INSERT INTO sessions (id, user_id, created_at, expires_at)
+      VALUES (${s.id}, ${s.userId}, ${s.createdAt}, ${s.expiresAt})`;
+  }
+
+  async getSession(id: string): Promise<StoredSession | null> {
+    const rows = await this.sql`SELECT * FROM sessions WHERE id = ${id} AND expires_at > now()`;
+    if (!rows.length) return null;
+    const r = rows[0]!;
+    return {
+      id: r['id'] as string,
+      userId: r['user_id'] as string,
+      createdAt: r['created_at'] as Date,
+      expiresAt: r['expires_at'] as Date,
+    };
+  }
+
+  async deleteSession(id: string): Promise<void> {
+    await this.sql`DELETE FROM sessions WHERE id = ${id}`;
+  }
+
   async getAutonomy(tenantId: string): Promise<AutonomyConfig | null> {
     const rows = await this.sql`SELECT config FROM autonomy_config WHERE tenant_id = ${tenantId}`;
     return rows.length ? (rows[0]!['config'] as AutonomyConfig) : null;
@@ -289,6 +349,19 @@ export class PgStore implements Store {
   async close(): Promise<void> {
     await this.sql.end();
   }
+}
+
+function rowToUser(r: postgres.Row): StoredUser {
+  return {
+    id: r['id'] as string,
+    tenantId: r['tenant_id'] as string,
+    email: r['email'] as string,
+    name: r['name'] as string,
+    passwordHash: r['password_hash'] as string,
+    recoveryCodeHash: r['recovery_code_hash'] as string,
+    createdAt: r['created_at'] as Date,
+    updatedAt: r['updated_at'] as Date,
+  };
 }
 
 function rowToPiece(r: postgres.Row): ContentPiece {
